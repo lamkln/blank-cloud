@@ -30,7 +30,7 @@ import {
   resolveCommitBrand,
   updateAppSettings,
 } from "../settings/store.js";
-import { isGitHubOAuthConfigured } from "../auth/github-oauth.js";
+import { isGitHubOAuthConfigured, getGitHubConnectSetup } from "../auth/github-oauth.js";
 
 const repo = new Hono();
 
@@ -105,6 +105,7 @@ repo.get("/", async (c) => {
     githubOAuthSignIn: isGitHubOAuthConfigured(),
     oneClickGitHubConnect:
       isGitHubOAuthConfigured() || Boolean(getGitHubOAuthClientId()),
+    githubSetup: getGitHubConnectSetup(c),
     git,
     ready: isWorkspaceReady(root, usesActiveRemoteRepo()),
   });
