@@ -547,65 +547,48 @@ function shortSha(sha) {
 
 function renderUpdatePanel(data) {
   updateSnapshot = data;
-  $("update-version").textContent = `v${data.version}${data.localCommit ? ` · ${shortSha(data.localCommit)}` : ""}`;
-  const statusEl = $("update-status");
-  statusEl.classList.toggle("has-update", Boolean(data.updateAvailable));
-  if (data.lastError && !data.updateAvailable) {
-    statusEl.textContent = `Check failed: ${data.lastError}`;
-  } else if (data.updateAvailable) {
-    statusEl.textContent = `Update available (${shortSha(data.remoteCommit)})${data.remoteMessage ? ` — ${data.remoteMessage}` : ""}`;
-  } else if (data.lastCheckAt) {
-    statusEl.textContent = `Up to date on ${data.ref} (checked ${new Date(data.lastCheckAt).toLocaleString()})`;
-  } else {
-    statusEl.textContent = "Not checked yet";
+  const panel = $("update-panel");
+  const show = Boolean(data.updateAvailable);
+  panel.hidden = !show;
+  if (!show) {
+    return;
   }
-  $("update-auto-check").checked = Boolean(data.autoCheckEnabled);
-  $("update-auto-apply").checked = Boolean(data.autoApplyEnabled);
-  $("update-auto-apply").disabled = !data.applyAvailable;
+  $("update-version").textContent = data.remoteCommit
+    ? shortSha(data.remoteCommit)
+    : shortSha(data.localCommit);
+  const statusEl = $("update-status");
+  statusEl.classList.add("has-update");
+  statusEl.textContent = data.remoteMessage
+    ? `${data.remoteMessage} (main · ${shortSha(data.remoteCommit)})`
+    : `New version on ${data.ref} · ${shortSha(data.remoteCommit)}`;
   const applyBtn = $("update-apply");
-  applyBtn.hidden = !data.updateAvailable;
   applyBtn.disabled = !data.applyAvailable;
+  applyBtn.hidden = false;
   const hint = $("update-hint");
   if (data.applyAvailable) {
-    hint.textContent = "One-click update enabled (install dir + Docker socket mounted).";
+    hint.textContent = "Pulls latest blank-cloud and restarts Docker.";
   } else {
-    hint.textContent =
-      "Host update: cd ~/blank-cloud && bash scripts/update.sh — or enable mounts in docker-compose (see README).";
+    hint.textContent = "Or on the host: cd ~/blank-cloud && bash scripts/update.sh";
   }
 }
 
 async function loadUpdateStatus() {
   try {
-    const data = await api("/update/status");
+    let data = await api("/update/status");
+    if (!data.updateAvailable && data.autoCheckEnabled !== false) {
+      const last = data.lastCheckAt ? Date.parse(data.lastCheckAt) : 0;
+      const oneHour = 60 * 60 * 1000;
+      if (!Number.isFinite(last) || Date.now() - last > oneHour) {
+        try {
+          data = await api("/update/check", { method: "POST", body: "{}" });
+        } catch {
+          /* keep cached status */
+        }
+      }
+    }
     renderUpdatePanel(data);
-  } catch (e) {
-    $("update-status").textContent = e.message;
-  }
-}
-
-async function saveUpdateSettings() {
-  const payload = {
-    autoCheckEnabled: $("update-auto-check").checked,
-    autoApplyEnabled: $("update-auto-apply").checked,
-  };
-  try {
-    const data = await api("/update/settings", { method: "PATCH", body: JSON.stringify(payload) });
-    renderUpdatePanel(data);
-  } catch (e) {
-    $("update-status").textContent = e.message;
-  }
-}
-
-async function checkUpdatesNow() {
-  $("update-check").disabled = true;
-  try {
-    const data = await api("/update/check", { method: "POST", body: "{}" });
-    renderUpdatePanel(data);
-    if (data.error) addSystemNote(data.error);
-  } catch (e) {
-    $("update-status").textContent = e.message;
-  } finally {
-    $("update-check").disabled = false;
+  } catch {
+    $("update-panel").hidden = true;
   }
 }
 
@@ -971,10 +954,7 @@ $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
 $("test-settings").addEventListener("click", () => void testSettingsConnection());
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
-$("update-check").addEventListener("click", () => void checkUpdatesNow());
 $("update-apply").addEventListener("click", () => void applyUpdateNow());
-$("update-auto-check").addEventListener("change", () => void saveUpdateSettings());
-$("update-auto-apply").addEventListener("change", () => void saveUpdateSettings());
 $("github-device-copy").addEventListener("click", async () => {
   const code = $("github-device-code").textContent?.trim();
   if (!code) return;

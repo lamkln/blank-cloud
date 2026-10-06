@@ -6,7 +6,7 @@
     <title>blank-cloud</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/ui/favicon-32.png" />
     <link rel="apple-touch-icon" href="/ui/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/ui/styles.css?v=0.3.3" />
+    <link rel="stylesheet" href="/ui/styles.css?v=0.3.4" />
   </head>
   <body>
     <div class="app">
@@ -119,23 +119,14 @@
             <p class="fine-print settings-status" id="settings-status" hidden></p>
             <p class="fine-print">Stored in <code>/app/data/settings.json</code> on the host (<code>./data</code> by default).</p>
           </div>
-          <div class="update-panel" id="update-panel">
+          <div class="update-panel" id="update-panel" hidden>
             <div class="update-head">
-              <span class="update-title">Updates</span>
-              <span class="update-version" id="update-version">v—</span>
+              <span class="update-title">Update available</span>
+              <span class="update-version" id="update-version"></span>
             </div>
-            <p class="fine-print update-status" id="update-status">Checking…</p>
-            <label class="update-toggle">
-              <input type="checkbox" id="update-auto-check" />
-              Auto-check daily
-            </label>
-            <label class="update-toggle">
-              <input type="checkbox" id="update-auto-apply" />
-              Auto-apply when available
-            </label>
+            <p class="fine-print update-status" id="update-status"></p>
             <div class="update-actions">
-              <button type="button" class="btn btn-sm" id="update-check">Check now</button>
-              <button type="button" class="btn btn-sm btn-primary" id="update-apply" hidden>Update now</button>
+              <button type="button" class="btn btn-sm btn-primary" id="update-apply">Update now</button>
             </div>
             <p class="fine-print" id="update-hint"></p>
           </div>
@@ -206,7 +197,7 @@
         <div class="review-commands" id="change-commands"></div>
       </aside>
     </div>
-    <script src="/ui/markdown.js?v=0.3.3"></script>
-    <script src="/ui/app.js?v=0.3.3" type="module"></script>
+    <script src="/ui/markdown.js?v=0.3.4"></script>
+    <script src="/ui/app.js?v=0.3.4" type="module"></script>
   </body>
 </html>
