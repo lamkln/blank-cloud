@@ -534,25 +534,6 @@ function renderRepoStatus(data) {
   el.className = `fine-print repo-status ${data.ready ? "ok" : "warn"}`;
 }
 
-function renderGitHubSetup(data) {
-  const el = $("repo-oauth-setup");
-  if (!el) return;
-  const setup = data?.githubSetup;
-  const connected = data?.oneClickGitHubConnect
-    ? Boolean(data.auth?.signedIn)
-    : Boolean(data.github?.login);
-  if (!setup || connected || setup.oneClickReady) {
-    el.hidden = true;
-    el.textContent = "";
-    return;
-  }
-  el.hidden = false;
-  el.innerHTML = `<strong>Connect GitHub</strong> needs a public OAuth Client ID (one-time, not a secret).<br/>
-Create an OAuth App → enable <strong>Device Flow</strong> → paste Client ID into<br/>
-<code>~/blank-cloud/data/github-oauth-client-id</code> then <code>docker compose restart</code>.<br/>
-<a href="https://github.com/settings/applications/new" target="_blank" rel="noopener">New OAuth App on GitHub</a>`;
-}
-
 async function loadRepo() {
   try {
     const data = await api("/repo");
@@ -564,7 +545,6 @@ async function loadRepo() {
 
     $("repo-connect-github").hidden = connected;
     $("repo-logout").hidden = !connected;
-    renderGitHubSetup(data);
 
     if (connected) {
       $("repo-picker").hidden = false;
@@ -614,22 +594,13 @@ async function logoutGitHub() {
 }
 
 async function connectGitHub() {
-  const oauth = repoSnapshot?.auth?.oauthEnabled;
-  const oneClick = repoSnapshot?.oneClickGitHubConnect;
   $("repo-connect-github").disabled = true;
   try {
-    if (oauth) {
+    if (repoSnapshot?.auth?.oauthEnabled) {
       window.location.href = "/auth/github/login";
       return;
     }
-    if (oneClick) {
-      await startGitHubDeviceSignIn();
-      return;
-    }
-    renderGitHubSetup(repoSnapshot);
-    throw new Error(
-      "Add a GitHub OAuth Client ID (device flow) — see the note under Connect GitHub.",
-    );
+    await startGitHubDeviceSignIn();
   } catch (e) {
     addSystemNote(e.message);
   } finally {

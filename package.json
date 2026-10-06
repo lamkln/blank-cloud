@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/generate-bundled-github-client.mjs",
     "build": "tsc",
     "logos": "bash scripts/generate-logos.sh",
     "start": "node dist/server.js",

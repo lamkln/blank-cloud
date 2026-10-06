@@ -1,12 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import { BUNDLED_GITHUB_OAUTH_CLIENT_ID } from "./bundled-client-id.generated.js";
 
 /**
- * Public client id for GitHub device flow (no secret, no callback URL per user).
- * Maintainers: register one OAuth App named "blank-cloud", enable device flow,
- * paste Client ID here or in github-oauth-client-id at repo root / data dir.
+ * Public OAuth client id for the official blank-agents GitHub app (device flow).
+ * Shipped in github-oauth-client-id at repo root — not a secret.
  */
-export const BUNDLED_GITHUB_OAUTH_CLIENT_ID = "";
 
 let cachedClientId: string | undefined;
 
@@ -15,7 +14,9 @@ function readClientIdFile(filePath: string): string {
     const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
     for (const line of lines) {
       const t = line.trim();
-      if (t && !t.startsWith("#")) return t;
+      if (!t || t.startsWith("#")) continue;
+      if (/REPLACE|CHANGEME|PASTE/i.test(t)) continue;
+      return t;
     }
     return "";
   } catch {
