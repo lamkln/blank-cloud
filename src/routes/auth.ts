@@ -14,7 +14,8 @@ import {
   rememberOAuthState,
   setSessionCookie,
 } from "../auth/session.js";
-import { persistGitHubConnection } from "../auth/connect-github.js";
+import { persistGitHubConnection, usePerUserGitHubStorage } from "../auth/connect-github.js";
+import { updateAppSettings } from "../settings/store.js";
 
 const auth = new Hono();
 
@@ -60,6 +61,16 @@ auth.get("/github/callback", async (c) => {
 
 auth.post("/logout", (c) => {
   clearSessionCookie(c);
+  if (!usePerUserGitHubStorage()) {
+    updateAppSettings({
+      repo: {
+        gitToken: "",
+        githubLogin: "",
+        githubRepoFullName: "",
+        remoteUrl: "",
+      },
+    });
+  }
   return c.json({ ok: true });
 });
 

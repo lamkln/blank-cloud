@@ -49,6 +49,12 @@ export function setSessionCookie(c: Context, login: string): void {
 
 export function clearSessionCookie(c: Context): void {
   deleteCookie(c, COOKIE_NAME, { path: "/" });
+  setCookie(c, COOKIE_NAME, "", {
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 export function createOAuthState(): string {

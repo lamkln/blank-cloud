@@ -1,4 +1,5 @@
 import { getRequestUser } from "../context/request.js";
+import { usePerUserGitHubStorage } from "../auth/connect-github.js";
 import {
   loadAppSettings,
   resolveCommitBrand,
@@ -19,6 +20,19 @@ export function activeRepoSettings(): RepoSettings {
       githubRepoFullName: user.repo.githubRepoFullName,
       pushOnApprove: user.repo.pushOnApprove,
       githubLogin: user.login,
+      gitAuthorName: brand.name,
+      gitAuthorEmail: brand.email,
+    };
+  }
+  if (usePerUserGitHubStorage()) {
+    return {
+      ...app.repo,
+      gitToken: "",
+      remoteUrl: "",
+      branch: "main",
+      githubRepoFullName: "",
+      pushOnApprove: false,
+      githubLogin: "",
       gitAuthorName: brand.name,
       gitAuthorEmail: brand.email,
     };
