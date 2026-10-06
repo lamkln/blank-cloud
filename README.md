@@ -2,19 +2,39 @@
 
 Self-hosted AI coding agent in a single Docker container: chat API, repository tools, and a command runner. No Cursor and no third-party agent cloud — your code and API keys stay on the Linux host.
 
+### Install (recommended — no `raw.githubusercontent.com`)
+
+Requires **git**, **Docker**, and **Docker Compose v2** on Linux.
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/install.sh | bash
+git clone --depth 1 https://github.com/lamkln/blank-cloud.git ~/blank-cloud && bash ~/blank-cloud/install.sh
 ```
 
-If that URL fails, use the GitHub redirect (same file):
+### Install (curl)
+
+Use the **`/raw/main/`** URL. This is wrong and returns **404**:
+
+`https://github.com/lamkln/blank-cloud/install.sh`
+
+Working one-liners:
 
 ```bash
 curl -fsSL https://github.com/lamkln/blank-cloud/raw/main/install.sh | bash
 ```
 
-Requires **git**, **Docker**, and **Docker Compose v2** on Linux. The script clones to `~/blank-cloud`, creates `.env`, and builds the `blank-cloud` image. Set an API key in `~/blank-cloud/.env`, then run `cd ~/blank-cloud && docker compose up -d`.
+```bash
+curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/install.sh | bash
+```
+
+Release asset (if the URLs above fail):
+
+```bash
+curl -fsSL https://github.com/lamkln/blank-cloud/releases/latest/download/install.sh | bash
+```
 
 Installer options (prefix the command): `BLANK_CLOUD_INSTALL_DIR`, `BLANK_CLOUD_PROJECT`, `BLANK_CLOUD_REF` (default `main`), `BLANK_CLOUD_START=1` to start in the background after build.
+
+The installer creates `~/blank-cloud/.env`. Add your API key there, then run `cd ~/blank-cloud && docker compose up -d`.
 
 ## Quick start (manual)
 
