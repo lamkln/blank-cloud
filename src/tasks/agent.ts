@@ -31,6 +31,12 @@ function modelMessages(task: TaskRecord) {
   return task.messages.map((m) => ({ role: m.role, content: m.content }));
 }
 
+function displayPath(rel: string): string {
+  const p = rel.trim() || ".";
+  if (p === "." || p === "./") return "project root";
+  return p;
+}
+
 function buildTools(taskId: string) {
   return {
     list_directory: tool({
@@ -39,7 +45,7 @@ function buildTools(taskId: string) {
         path: z.string().describe('Directory path, use "." for workspace root'),
       }),
       execute: async ({ path: dirPath }) => {
-        emit(taskId, "tool", `Listed ${dirPath}`, {
+        emit(taskId, "tool", `Listed files in ${displayPath(dirPath)}`, {
           tool: "list_directory",
           path: dirPath,
         });
@@ -58,7 +64,10 @@ function buildTools(taskId: string) {
         path: z.string(),
       }),
       execute: async ({ path: filePath }) => {
-        emit(taskId, "tool", `Read ${filePath}`, { tool: "read_file", path: filePath });
+        emit(taskId, "tool", `Read file ${displayPath(filePath)}`, {
+          tool: "read_file",
+          path: filePath,
+        });
         try {
           const content = readWorkspaceFile(filePath);
           return { path: filePath, content };

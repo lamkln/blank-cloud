@@ -156,12 +156,23 @@ function addTurn(role, text) {
   scrollThread();
 }
 
-function addToolRow(text) {
+function humanizeToolMessage(msg, data) {
+  const text = String(msg ?? "");
+  if (text === "Listed ." || data?.path === ".") {
+    return "Listed files in project root";
+  }
+  if (/^Listed \.$/.test(text)) {
+    return "Listed files in project root";
+  }
+  return text;
+}
+
+function addToolRow(text, data) {
   $("empty-state").hidden = true;
   const row = document.createElement("div");
   row.className = "tool-row";
   row.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="1.2" opacity=".5"/></svg><span></span>`;
-  row.querySelector("span").textContent = text;
+  row.querySelector("span").textContent = humanizeToolMessage(text, data);
   $("chat-thread").appendChild(row);
   scrollThread();
 }
@@ -245,7 +256,7 @@ function ingestEvent(ev) {
     return;
   }
   if (type === "tool") {
-    addToolRow(msg);
+    addToolRow(msg, ev.data);
     return;
   }
   if (type === "command_stdout" || type === "command_stderr") {
