@@ -78,35 +78,37 @@ services:
       CUSTOM_OPENAI_API_KEY: ${CUSTOM_OPENAI_API_KEY:-}
 ```
 
-## API keys
+## Model, provider & API keys
 
-Set keys **only** in the container environment (Compose `.env`, `environment:` block, or `docker run -e`). They are never stored or returned by the HTTP API.
+Configure everything in the **Web UI**: sidebar → **Model** → set provider, model, and API keys → **Save settings**.
 
-Example `.env`:
+Keys are stored in **`./data/settings.json`** on the host (mounted at `/app/data` in the container). They persist across restarts. The API returns **masked** keys only (`sk-…abcd`).
+
+Optional: seed defaults from Compose `.env` on first boot (Web UI values override after save):
 
 ```bash
 BLANK_CLOUD_PROJECT=/home/you/your-app
+# Optional bootstrap — prefer Web UI after first launch
 LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
-# LLM_MODEL=gpt-4o   # optional; provider default used if omitted
 ```
 
-| Provider     | `LLM_PROVIDER` | Environment variable              |
-|-------------|----------------|-----------------------------------|
-| OpenAI      | `openai`       | `OPENAI_API_KEY`                  |
-| Anthropic   | `anthropic`    | `ANTHROPIC_API_KEY`               |
-| Gemini      | `gemini`       | `GOOGLE_GENERATIVE_AI_API_KEY`    |
-| Groq        | `groq`         | `GROQ_API_KEY`                    |
-| OpenRouter  | `openrouter`   | `OPENROUTER_API_KEY`              |
-| Custom OpenAI-compatible | `custom` | `CUSTOM_OPENAI_BASE_URL`, `CUSTOM_OPENAI_API_KEY` |
+| Provider | Setting in UI |
+|----------|----------------|
+| OpenAI | OpenAI API key |
+| Anthropic | Anthropic API key |
+| Gemini | Google Gemini API key |
+| Groq | Groq API key |
+| OpenRouter | OpenRouter API key |
+| Custom | Base URL + API key |
 
-Switch provider or model at runtime (no keys via API):
+Programmatic settings (keys omitted unless you PATCH new values):
 
 ```bash
 curl -s http://localhost:8787/settings | jq
 curl -s -X PATCH http://localhost:8787/settings \
   -H 'Content-Type: application/json' \
-  -d '{"provider":"anthropic","model":"claude-sonnet-4-20250514"}' | jq
+  -d '{"provider":"anthropic","model":"claude-sonnet-4-20250514","apiKey":"sk-..."}' | jq
 ```
 
 ## Agent workflow

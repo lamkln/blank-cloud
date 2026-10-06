@@ -449,6 +449,21 @@ async function loadHealth() {
   }
 }
 
+const API_KEY_LABELS = {
+  openai: "OpenAI API key",
+  anthropic: "Anthropic API key",
+  gemini: "Google Gemini API key",
+  groq: "Groq API key",
+  openrouter: "OpenRouter API key",
+  custom: "Custom OpenAI-compatible API key",
+};
+
+function syncProviderFields() {
+  const provider = $("provider").value;
+  $("custom-url-wrap").hidden = provider !== "custom";
+  $("api-key-label").textContent = API_KEY_LABELS[provider] ?? "API key";
+}
+
 async function loadSettings() {
   const data = await api("/settings");
   const select = $("provider");
@@ -456,26 +471,49 @@ async function loadSettings() {
   for (const p of data.providers) {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = p.configured ? p.id : `${p.id} · no key`;
+    opt.textContent = p.configured ? p.id : `${p.id} · needs key`;
     if (p.id === data.provider) opt.selected = true;
     select.appendChild(opt);
   }
   $("model").value = data.model || "";
   $("custom-base-url").value = data.customBaseUrl || "";
-  $("custom-url-wrap").hidden = data.provider !== "custom";
+  syncProviderFields();
+  const masked = data.keys?.[providerKeyField($("provider").value)];
+  $("key-hint").textContent = masked
+    ? `Saved: ${masked} (leave blank to keep)`
+    : "No key saved for this provider yet.";
+  $("api-key").value = "";
+  for (const input of document.querySelectorAll("[data-key]")) {
+    input.value = "";
+  }
+}
+
+function providerKeyField(provider) {
+  if (provider === "custom") return "customApiKey";
+  return provider;
 }
 
 async function saveSettings() {
+  const provider = $("provider").value;
   const payload = {
-    provider: $("provider").value,
+    provider,
     model: $("model").value.trim(),
+    customBaseUrl: $("custom-base-url").value.trim(),
   };
-  if ($("provider").value === "custom") {
-    payload.customBaseUrl = $("custom-base-url").value.trim();
+  const apiKey = $("api-key").value.trim();
+  if (apiKey) payload.apiKey = apiKey;
+
+  const keys = {};
+  for (const input of document.querySelectorAll("[data-key]")) {
+    const v = input.value.trim();
+    if (v) keys[input.dataset.key] = v;
   }
+  if (Object.keys(keys).length) payload.keys = keys;
+
   await api("/settings", { method: "PATCH", body: JSON.stringify(payload) });
   $("settings-popover").hidden = true;
   $("settings-toggle").setAttribute("aria-expanded", "false");
+  addSystemNote("Settings saved");
   await loadSettings();
 }
 
@@ -486,7 +524,8 @@ $("reject").addEventListener("click", () => void reject());
 $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
 $("provider").addEventListener("change", () => {
-  $("custom-url-wrap").hidden = $("provider").value !== "custom";
+  syncProviderFields();
+  void loadSettings();
 });
 
 $("settings-toggle").addEventListener("click", () => {
