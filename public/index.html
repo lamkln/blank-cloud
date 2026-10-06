@@ -32,20 +32,9 @@
           <div class="section-label">Repository</div>
           <p class="fine-print" id="repo-github-link">Connect GitHub, then pick a repository.</p>
           <div class="repo-actions">
-            <a class="btn btn-sm" id="repo-signin-github" href="/auth/github/login">Sign in with GitHub</a>
-            <button type="button" class="btn btn-sm" id="repo-connect-github">Connect (PAT)</button>
+            <button type="button" class="btn btn-sm btn-primary" id="repo-connect-github">Connect GitHub</button>
             <button type="button" class="btn btn-sm" id="repo-logout" hidden>Sign out</button>
-            <button type="button" class="btn btn-sm" id="repo-device-github" hidden>Sign in (device)</button>
           </div>
-          <label class="field field-compact" id="repo-token-wrap">
-            <span>GitHub token</span>
-            <input
-              id="repo-token"
-              type="password"
-              autocomplete="off"
-              placeholder="Fine-grained PAT with Repository access"
-            />
-          </label>
           <label class="field field-compact">
             <span>Shared brand — commits show as</span>
             <input id="repo-bot-name" type="text" spellcheck="false" autocomplete="off" placeholder="blank-cloud agent" />
@@ -54,7 +43,7 @@
             <span>Brand email (bot noreply)</span>
             <input id="repo-bot-email" type="email" spellcheck="false" autocomplete="off" placeholder="Set via Connect on bot account" />
           </label>
-          <p class="fine-print">Each user signs in with GitHub when OAuth is enabled; commit display name is shared (like @cursoragent).</p>
+          <p class="fine-print">One-click Connect when the server has GitHub OAuth configured; shared commit display name (like @cursoragent).</p>
           <div id="repo-picker" hidden>
             <label class="field field-compact">
               <span>Your repositories</span>
@@ -83,6 +72,15 @@
             <label class="field field-compact field-check">
               <input id="repo-push" type="checkbox" />
               <span>Commit &amp; push after approve</span>
+            </label>
+            <label class="field field-compact" id="repo-token-wrap">
+              <span>GitHub token (legacy — only if Connect is unavailable)</span>
+              <input
+                id="repo-token"
+                type="password"
+                autocomplete="off"
+                placeholder="Classic PAT with repo scope"
+              />
             </label>
             <div class="repo-actions">
               <button type="button" class="btn btn-sm" id="repo-save">Save</button>

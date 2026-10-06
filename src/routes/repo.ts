@@ -18,6 +18,7 @@ import {
   startGitHubDeviceFlow,
 } from "../repo/github.js";
 import { authStatus } from "../auth/middleware.js";
+import { persistGitHubConnection } from "../auth/connect-github.js";
 import { updateUser } from "../auth/users.js";
 import { getRequestUser } from "../context/request.js";
 import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
@@ -99,6 +100,8 @@ repo.get("/", async (c) => {
       : null,
     githubDeviceFlowAvailable: Boolean(getGitHubOAuthClientId()),
     githubOAuthSignIn: isGitHubOAuthConfigured(),
+    oneClickGitHubConnect:
+      isGitHubOAuthConfigured() || Boolean(getGitHubOAuthClientId()),
     git,
     ready: isWorkspaceReady(root, usesActiveRemoteRepo()),
   });
@@ -347,17 +350,11 @@ repo.post("/github/device/poll", async (c) => {
     }
     const accessToken = result.access_token;
     const user = await fetchGitHubUser(accessToken);
-    const botEmail = githubNoreplyEmail(user.id, user.login);
+    persistGitHubConnection(c, user, accessToken);
     const settings = loadAppSettings();
     const brand = resolveCommitBrand(settings.repo);
-    const next = updateAppSettings({
-      repo: {
-        gitToken: accessToken,
-        githubLogin: user.login,
-        gitAuthorName: brand.name || DEFAULT_COMMIT_BRAND_NAME,
-        gitAuthorEmail: brand.email || botEmail,
-      },
-    });
+    const botEmail = githubNoreplyEmail(user.id, user.login);
+    const next = loadAppSettings();
     const repos = await listUserRepos(accessToken, { perPage: 30 });
     return c.json({
       status: "ok",
@@ -365,6 +362,8 @@ repo.post("/github/device/poll", async (c) => {
         login: user.login,
         html_url: user.html_url,
         avatar_url: user.avatar_url,
+        commitEmail: brand.email || botEmail,
+        commitName: brand.name || DEFAULT_COMMIT_BRAND_NAME,
       },
       repos,
       configured: maskedRepo(next),

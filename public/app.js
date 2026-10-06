@@ -538,34 +538,34 @@ async function loadRepo() {
   try {
     const data = await api("/repo");
     const auth = data.auth ?? {};
-    $("repo-signin-github").hidden = !auth.oauthEnabled || auth.signedIn;
-    $("repo-logout").hidden = !auth.signedIn;
-    $("repo-token-wrap").hidden = auth.oauthEnabled && auth.signedIn;
-    $("repo-connect-github").hidden = auth.oauthEnabled;
+    const connected = Boolean(data.github?.login);
+    const oneClick = Boolean(data.oneClickGitHubConnect);
+
+    $("repo-connect-github").hidden = connected;
+    $("repo-logout").hidden = !connected;
+    $("repo-token-wrap").hidden = oneClick;
+
     $("repo-url").value = data.configured?.remoteUrl || "";
     $("repo-branch").value = data.configured?.branch || "main";
     $("repo-push").checked = Boolean(data.configured?.pushOnApprove);
     $("repo-bot-name").value = data.configured?.gitAuthorName || "";
     $("repo-bot-email").value = data.configured?.gitAuthorEmail || "";
     $("repo-token").value = "";
-    $("repo-device-github").hidden = !data.githubDeviceFlowAvailable;
 
     const gh = data.github;
     const linkEl = $("repo-github-link");
     if (gh?.login) {
-      linkEl.innerHTML = auth.oauthEnabled
-        ? `Signed in as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — pick a repo:`
-        : `Connected as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — pick a repo:`;
+      linkEl.innerHTML = `Connected as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — pick a repo:`;
       linkEl.className = "fine-print repo-status ok";
       $("repo-picker").hidden = false;
       await refreshGitHubRepoList($("repo-search").value.trim());
-    } else if (auth.oauthEnabled) {
-      linkEl.textContent = "Sign in with GitHub, then pick a repository.";
+    } else if (oneClick) {
+      linkEl.textContent = "Click Connect GitHub — authorize on GitHub, then pick a repository. No token to paste.";
       linkEl.className = "fine-print";
       $("repo-picker").hidden = true;
     } else {
       linkEl.textContent =
-        "Paste a GitHub personal access token (repo scope), then Connect (PAT).";
+        "Server has no GitHub OAuth yet. Open Advanced and paste a PAT, or set GITHUB_OAUTH_CLIENT_ID in .env.";
       linkEl.className = "fine-print";
       $("repo-picker").hidden = true;
     }
@@ -594,11 +594,23 @@ async function logoutGitHub() {
 }
 
 async function connectGitHub() {
+  const oneClick = repoSnapshot?.oneClickGitHubConnect;
+  const oauth = repoSnapshot?.auth?.oauthEnabled;
   $("repo-connect-github").disabled = true;
   try {
+    if (oauth) {
+      window.location.href = "/auth/github/login";
+      return;
+    }
+    if (oneClick) {
+      await startGitHubDeviceSignIn();
+      return;
+    }
     const token = $("repo-token").value.trim();
     if (!token) {
-      throw new Error("Paste a GitHub token first (Settings → Developer settings → PAT).");
+      throw new Error(
+        "Set GITHUB_OAUTH_CLIENT_ID (+ secret + BLANK_CLOUD_PUBLIC_URL) on the server for one-click Connect, or paste a PAT under Advanced.",
+      );
     }
     const res = await api("/repo/github/link", {
       method: "POST",
@@ -634,7 +646,6 @@ async function selectGitHubRepo(fullName) {
 }
 
 async function startGitHubDeviceSignIn() {
-  $("repo-device-github").disabled = true;
   try {
     const start = await api("/repo/github/device/start", { method: "POST", body: "{}" });
     addSystemNote(`Open ${start.verification_uri} and enter code ${start.user_code}`);
@@ -659,8 +670,6 @@ async function startGitHubDeviceSignIn() {
     }
   } catch (e) {
     addSystemNote(e.message);
-  } finally {
-    $("repo-device-github").disabled = false;
   }
 }
 
@@ -858,7 +867,6 @@ $("repo-save").addEventListener("click", () => void saveRepo());
 $("repo-sync").addEventListener("click", () => void syncRepo());
 $("repo-connect-github").addEventListener("click", () => void connectGitHub());
 $("repo-logout").addEventListener("click", () => void logoutGitHub());
-$("repo-device-github").addEventListener("click", () => void startGitHubDeviceSignIn());
 $("repo-search").addEventListener("input", () => {
   clearTimeout(repoSearchTimer);
   repoSearchTimer = setTimeout(() => void refreshGitHubRepoList($("repo-search").value.trim()), 250);
@@ -893,7 +901,12 @@ document.addEventListener("click", (e) => {
 });
 
 void loadHealth();
-void loadRepo();
+void loadRepo().then(() => {
+  if (new URLSearchParams(window.location.search).get("github") === "connected") {
+    addSystemNote("GitHub connected. Pick a repository.");
+    window.history.replaceState({}, "", "/");
+  }
+});
 void loadSettings();
 void loadRuns();
 setStatus("idle");

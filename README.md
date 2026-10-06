@@ -63,7 +63,7 @@ SESSION_SECRET=long-random-string                # signs login cookies
 ```
 
 3. Restart: `docker compose up --build -d`
-4. In the UI: **Sign in with GitHub** → search and **click a repository** → workspace shows **Ready**.
+4. In the UI: **Connect GitHub** (no PAT to paste) → pick a repository → workspace shows **Ready**.
 5. Optional: **Advanced** → **Commit & push after approve** (stored per user when OAuth is on).
 
 **Shared commit brand** (display name on commits, e.g. `blank-cloud agent`) stays **global** in the sidebar — same idea as [@cursoragent](https://github.com/cursoragent); pushes still use **your** GitHub token and repos you can access.
