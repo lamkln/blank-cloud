@@ -249,6 +249,38 @@ textarea {
   font-size: 10px;
 }
 
+.github-device-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.github-device-title {
+  font-size: 11px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.github-device-code {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.github-device-panel .repo-actions,
+.github-device-panel .btn {
+  margin-top: 6px;
+  margin-right: 6px;
+}
+
 #repo-github-link a {
   color: var(--accent, #7eb8ff);
 }
