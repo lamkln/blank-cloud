@@ -64,6 +64,26 @@ BLANK_CLOUD_PUSH_ON_APPROVE=1
 
 When a remote URL is saved, the agent uses **`./data/workspace`** instead of the `BLANK_CLOUD_PROJECT` mount.
 
+### GitHub bot account (like Cursor Agent)
+
+GitHub shows **who pushed** and **commit author** separately. For a dedicated bot identity:
+
+1. **Create a GitHub account** for the bot (e.g. `your-blank-cloud-bot`) — same idea as [@cursoragent](https://github.com/cursoragent).
+2. **Add the bot to your repo**: Settings → Collaborators (or org team with write access).
+3. **Create a PAT** on the **bot account** (fine-grained: Contents read/write on that repo; or classic `repo` scope).
+4. In blank-cloud **Repository**: paste the PAT → **Link GitHub bot** (verifies via GitHub API and sets commit name + `id+login@users.noreply.github.com`).
+5. **Clone / sync**, enable **Commit & push after approve** if you want merges on `origin`.
+
+Commits appear under the bot profile when author email matches GitHub’s noreply address for that account.
+
+Optional env:
+
+```bash
+BLANK_CLOUD_GIT_AUTHOR_NAME=blank-cloud agent
+BLANK_CLOUD_GIT_AUTHOR_EMAIL=12345678+botlogin@users.noreply.github.com
+BLANK_CLOUD_GITHUB_LOGIN=botlogin
+```
+
 ### 2. Docker mount — existing checkout on the NAS
 
 Leave **Remote URL** empty and set `BLANK_CLOUD_PROJECT` to a folder that already contains your repo:
@@ -163,6 +183,7 @@ curl -s -X PATCH http://localhost:8787/settings \
 | `GET` | `/health` | Liveness and workspace path |
 | `GET` | `/repo` | Workspace mode, git status, configured remote |
 | `PATCH` | `/repo` | Save remote URL, branch, token, push-on-approve |
+| `POST` | `/repo/github/link` | Verify PAT and set bot commit identity |
 | `POST` | `/repo/sync` | Clone or pull into the active workspace |
 | `POST` | `/repo/push` | Commit all changes and push (manual) |
 | `GET` | `/settings` | Active provider/model and which providers have keys configured |

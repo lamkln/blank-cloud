@@ -89,6 +89,7 @@ export async function syncRepository(
     await runGit(workspaceRoot, ["pull", "--ff-only", "origin", branch]).catch(async () => {
       await runGit(workspaceRoot, ["pull", "origin", branch]);
     });
+    await applyGitIdentity(workspaceRoot, repo);
     return { action: "pull", branch };
   }
 
@@ -109,6 +110,7 @@ export async function syncRepository(
     workspaceRoot,
   ]);
   await runGit(workspaceRoot, ["remote", "set-url", "origin", remoteUrl]);
+  await applyGitIdentity(workspaceRoot, repo);
   return { action: "clone", branch };
 }
 
@@ -171,6 +173,18 @@ function sanitizeRemoteForDisplay(url: string): string {
   return url.replace(/x-access-token:[^@]+@/i, "x-access-token:***@");
 }
 
+export async function applyGitIdentity(workspaceRoot: string, repo: RepoSettings): Promise<void> {
+  if (!fs.existsSync(path.join(workspaceRoot, ".git"))) return;
+  const name = repo.gitAuthorName.trim();
+  const email = repo.gitAuthorEmail.trim();
+  if (name) {
+    await runGit(workspaceRoot, ["config", "user.name", name]);
+  }
+  if (email) {
+    await runGit(workspaceRoot, ["config", "user.email", email]);
+  }
+}
+
 export async function commitAndPush(
   workspaceRoot: string,
   repo: RepoSettings,
@@ -182,6 +196,8 @@ export async function commitAndPush(
   }
   const branch = repo.branch.trim() || "main";
   const publicRemote = normalizeRemoteUrl(repo.remoteUrl);
+
+  await applyGitIdentity(workspaceRoot, repo);
 
   const addArgs = paths.length ? ["add", "--", ...paths] : ["add", "-A"];
   await runGit(workspaceRoot, addArgs);

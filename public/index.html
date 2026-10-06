@@ -50,10 +50,20 @@
             <input id="repo-push" type="checkbox" />
             <span>Commit &amp; push after approve</span>
           </label>
+          <label class="field field-compact">
+            <span>Bot name (commit author)</span>
+            <input id="repo-bot-name" type="text" spellcheck="false" autocomplete="off" placeholder="blank-cloud agent" />
+          </label>
+          <label class="field field-compact">
+            <span>Bot email (GitHub noreply)</span>
+            <input id="repo-bot-email" type="email" spellcheck="false" autocomplete="off" placeholder="id+login@users.noreply.github.com" />
+          </label>
           <div class="repo-actions">
             <button type="button" class="btn btn-sm" id="repo-save">Save repo</button>
             <button type="button" class="btn btn-sm" id="repo-sync">Clone / sync</button>
+            <button type="button" class="btn btn-sm" id="repo-link-github">Link GitHub bot</button>
           </div>
+          <p class="fine-print" id="repo-github-link">Create a GitHub machine user + PAT, paste token above, then Link.</p>
           <p class="fine-print repo-status" id="repo-status">Connect GitHub or any git remote before starting an agent.</p>
           <div class="workspace-path" id="workspace" title="">…</div>
         </div>

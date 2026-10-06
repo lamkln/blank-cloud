@@ -1,7 +1,18 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { getWorkspaceRoot } from "../config.js";
-import { commitAndPush, getGitStatus, syncRepository, isWorkspaceReady } from "../repo/git.js";
+import {
+  applyGitIdentity,
+  commitAndPush,
+  getGitStatus,
+  isWorkspaceReady,
+  syncRepository,
+} from "../repo/git.js";
+import {
+  defaultBotDisplayName,
+  fetchGitHubUser,
+  githubNoreplyEmail,
+} from "../repo/github.js";
 import {
   loadAppSettings,
   maskedRepo,
@@ -16,16 +27,43 @@ const patchSchema = z.object({
   branch: z.string().optional(),
   gitToken: z.string().optional(),
   pushOnApprove: z.boolean().optional(),
+  gitAuthorName: z.string().optional(),
+  gitAuthorEmail: z.string().optional(),
+  githubLogin: z.string().optional(),
+});
+
+const linkSchema = z.object({
+  gitToken: z.string().optional(),
+  botDisplayName: z.string().optional(),
 });
 
 repo.get("/", async (c) => {
   const settings = loadAppSettings();
   const root = getWorkspaceRoot();
   const git = await getGitStatus(root);
+  let github: Awaited<ReturnType<typeof fetchGitHubUser>> | null = null;
+  const token = settings.repo.gitToken.trim();
+  if (token) {
+    try {
+      github = await fetchGitHubUser(token);
+    } catch {
+      github = null;
+    }
+  }
   return c.json({
     workspace: root,
     mode: usesRemoteRepo(settings) ? "remote" : "mount",
     configured: maskedRepo(settings),
+    github: github
+      ? {
+          login: github.login,
+          id: github.id,
+          name: github.name,
+          html_url: github.html_url,
+          avatar_url: github.avatar_url,
+          suggestedEmail: githubNoreplyEmail(github.id, github.login),
+        }
+      : null,
     git,
     ready: isWorkspaceReady(root, usesRemoteRepo(settings)),
   });
@@ -50,9 +88,70 @@ repo.patch("/", async (c) => {
     repoPatch.gitToken = data.gitToken.trim();
   }
   if (data.pushOnApprove !== undefined) repoPatch.pushOnApprove = data.pushOnApprove;
+  if (data.gitAuthorName !== undefined) repoPatch.gitAuthorName = data.gitAuthorName.trim();
+  if (data.gitAuthorEmail !== undefined) repoPatch.gitAuthorEmail = data.gitAuthorEmail.trim();
+  if (data.githubLogin !== undefined) repoPatch.githubLogin = data.githubLogin.trim();
 
   const next = updateAppSettings({ repo: repoPatch });
+  const root = getWorkspaceRoot();
+  await applyGitIdentity(root, next.repo).catch(() => {});
   return c.json({ configured: maskedRepo(next) });
+});
+
+repo.post("/github/link", async (c) => {
+  let body: unknown = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    /* empty */
+  }
+  const parsed = linkSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+  }
+
+  const settings = loadAppSettings();
+  const token = parsed.data.gitToken?.trim() || settings.repo.gitToken.trim();
+  if (!token) {
+    return c.json({ error: "Save a GitHub personal access token first" }, 400);
+  }
+
+  let user;
+  try {
+    user = await fetchGitHubUser(token);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
+  }
+
+  const botName = parsed.data.botDisplayName?.trim() || defaultBotDisplayName(user);
+  const botEmail = githubNoreplyEmail(user.id, user.login);
+
+  const next = updateAppSettings({
+    repo: {
+      gitToken: token,
+      githubLogin: user.login,
+      gitAuthorName: botName,
+      gitAuthorEmail: botEmail,
+    },
+  });
+
+  const root = getWorkspaceRoot();
+  await applyGitIdentity(root, next.repo).catch(() => {});
+
+  return c.json({
+    ok: true,
+    github: {
+      login: user.login,
+      id: user.id,
+      name: user.name,
+      html_url: user.html_url,
+      avatar_url: user.avatar_url,
+      commitEmail: botEmail,
+      commitName: botName,
+    },
+    configured: maskedRepo(next),
+  });
 });
 
 repo.post("/sync", async (c) => {

@@ -519,7 +519,22 @@ async function loadRepo() {
     $("repo-url").value = data.configured?.remoteUrl || "";
     $("repo-branch").value = data.configured?.branch || "main";
     $("repo-push").checked = Boolean(data.configured?.pushOnApprove);
+    $("repo-bot-name").value = data.configured?.gitAuthorName || "";
+    $("repo-bot-email").value = data.configured?.gitAuthorEmail || "";
     $("repo-token").value = "";
+    const gh = data.github;
+    const linkEl = $("repo-github-link");
+    if (gh?.login) {
+      linkEl.innerHTML = `Linked GitHub: <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a>${data.configured?.githubLogin ? "" : ""}`;
+      linkEl.className = "fine-print repo-status ok";
+    } else if (data.configured?.githubLogin) {
+      linkEl.textContent = `Saved bot login @${data.configured.githubLogin} — paste token and Link to verify.`;
+      linkEl.className = "fine-print";
+    } else {
+      linkEl.textContent =
+        "Create a GitHub bot account + PAT (like Cursor Agent), paste token, then Link GitHub bot.";
+      linkEl.className = "fine-print";
+    }
     renderRepoStatus(data);
   } catch (e) {
     renderRepoStatus(null);
@@ -532,11 +547,31 @@ async function saveRepo() {
     remoteUrl: $("repo-url").value.trim(),
     branch: $("repo-branch").value.trim() || "main",
     pushOnApprove: $("repo-push").checked,
+    gitAuthorName: $("repo-bot-name").value.trim(),
+    gitAuthorEmail: $("repo-bot-email").value.trim(),
   };
   const token = $("repo-token").value.trim();
   if (token) payload.gitToken = token;
   await api("/repo", { method: "PATCH", body: JSON.stringify(payload) });
   await loadRepo();
+}
+
+async function linkGitHubBot() {
+  $("repo-link-github").disabled = true;
+  try {
+    await saveRepo();
+    const token = $("repo-token").value.trim();
+    const body = token ? { gitToken: token } : {};
+    const res = await api("/repo/github/link", { method: "POST", body: JSON.stringify(body) });
+    if (res.github?.commitName) $("repo-bot-name").value = res.github.commitName;
+    if (res.github?.commitEmail) $("repo-bot-email").value = res.github.commitEmail;
+    await loadRepo();
+    addSystemNote(`GitHub bot linked as @${res.github.login}`);
+  } catch (e) {
+    addSystemNote(e.message);
+  } finally {
+    $("repo-link-github").disabled = false;
+  }
 }
 
 async function syncRepo() {
@@ -717,6 +752,7 @@ $("test-settings").addEventListener("click", () => void testSettingsConnection()
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
 $("repo-save").addEventListener("click", () => void saveRepo());
 $("repo-sync").addEventListener("click", () => void syncRepo());
+$("repo-link-github").addEventListener("click", () => void linkGitHubBot());
 $("provider").addEventListener("change", () => {
   onProviderChange();
   setSettingsStatus("", null);
