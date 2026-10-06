@@ -9,6 +9,7 @@ import { logger } from "hono/logger";
 import { ensureWorkspace, getPort, getWorkspaceRoot } from "./config.js";
 import { ensureDataDir, loadAppSettings } from "./settings/store.js";
 import { attachUserContext, requireGitHubSignIn } from "./auth/middleware.js";
+import { ensureGitHubOAuthClientIdFile } from "./auth/github-client-id.js";
 import { authRoutes } from "./routes/auth.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { repoRoutes } from "./routes/repo.js";
@@ -16,6 +17,7 @@ import { taskRoutes } from "./routes/tasks.js";
 
 ensureWorkspace();
 ensureDataDir();
+ensureGitHubOAuthClientIdFile();
 loadAppSettings();
 
 const appRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");

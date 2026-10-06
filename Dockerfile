@@ -21,6 +21,7 @@ COPY package.json ./
 RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
+COPY github-oauth-client-id* ./
 RUN mkdir -p /app/data && chmod 700 /app/data
 
 ENV PORT=8787

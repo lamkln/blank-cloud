@@ -1,0 +1,6 @@
+# Public OAuth App Client ID for GitHub device login (not a secret).
+# Maintainers: create https://github.com/settings/applications/new
+#   Name: blank-cloud | Callback: http://localhost:8787/auth/github/callback
+#   Enable "Device Flow", paste Client ID on the next line, rebuild image.
+# Users: pull official blank-cloud with github-oauth-client-id filled in, or:
+#   echo 'YOUR_CLIENT_ID' > ~/blank-cloud/data/github-oauth-client-id && docker compose restart

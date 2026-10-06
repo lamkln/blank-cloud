@@ -17,6 +17,7 @@ import {
   pollGitHubDeviceFlow,
   startGitHubDeviceFlow,
 } from "../repo/github.js";
+import { hasGitHubConnectClientId } from "../auth/github-client-id.js";
 import { authStatus } from "../auth/middleware.js";
 import { persistGitHubConnection, usePerUserGitHubStorage } from "../auth/connect-github.js";
 import { updateUser } from "../auth/users.js";
@@ -101,10 +102,9 @@ repo.get("/", async (c) => {
           suggestedEmail: githubNoreplyEmail(github.id, github.login),
         }
       : null,
-    githubDeviceFlowAvailable: Boolean(getGitHubOAuthClientId()),
+    githubDeviceFlowAvailable: hasGitHubConnectClientId(),
     githubOAuthSignIn: isGitHubOAuthConfigured(),
-    oneClickGitHubConnect:
-      isGitHubOAuthConfigured() || Boolean(getGitHubOAuthClientId()),
+    oneClickGitHubConnect: hasGitHubConnectClientId(),
     githubSetup: getGitHubConnectSetup(c),
     git,
     ready: isWorkspaceReady(root, usesActiveRemoteRepo()),
