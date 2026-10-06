@@ -18,13 +18,23 @@ const EVENT_TYPES = [
   "stream_end",
 ];
 
+const STATUS_LABEL = {
+  idle: "Ready",
+  running: "Working",
+  executing: "Applying",
+  awaiting_approval: "Review changes",
+  completed: "Done",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
 const state = {
   taskId: null,
   status: "idle",
   eventSource: null,
   pollTimer: null,
   seenEventIds: new Set(),
-  terminalEl: null,
+  terminalBody: null,
 };
 
 async function api(path, options = {}) {
@@ -54,66 +64,82 @@ function escapeHtml(s) {
 
 function setStatus(status) {
   state.status = status;
-  const chip = $("status-chip");
-  chip.textContent = status.replace(/_/g, " ");
-  chip.className = `status-chip ${status}`;
+  $("status-dot").className = `status-dot ${status}`;
+  $("status-label").textContent = STATUS_LABEL[status] ?? status.replace(/_/g, " ");
 }
 
-function appendChatNode(node) {
-  $("chat-thread").appendChild(node);
-  $("chat-thread").scrollTop = $("chat-thread").scrollHeight;
+function updateEmptyState() {
+  const empty = $("empty-state");
+  if (!empty) return;
+  const hasContent = $("chat-thread").querySelector(".turn, .tool-row, .terminal-block, .system-note");
+  empty.hidden = Boolean(hasContent);
 }
 
-function addUserBubble(text) {
+function scrollThread() {
+  const el = $("chat-thread");
+  el.scrollTop = el.scrollHeight;
+}
+
+function addTurn(role, text) {
+  $("empty-state").hidden = true;
+  const wrap = document.createElement("div");
+  wrap.className = `turn turn-${role}`;
+  wrap.innerHTML = `<div class="turn-label">${role === "user" ? "You" : "Agent"}</div><div class="turn-body"></div>`;
+  wrap.querySelector(".turn-body").textContent = text;
+  $("chat-thread").appendChild(wrap);
+  scrollThread();
+}
+
+function addToolRow(text) {
+  $("empty-state").hidden = true;
+  const row = document.createElement("div");
+  row.className = "tool-row";
+  row.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="1.2" opacity=".5"/></svg><span></span>`;
+  row.querySelector("span").textContent = text;
+  $("chat-thread").appendChild(row);
+  scrollThread();
+}
+
+function addSystemNote(text) {
   const el = document.createElement("div");
-  el.className = "msg user";
+  el.className = "system-note";
   el.textContent = text;
-  appendChatNode(el);
-}
-
-function addAgentBubble(text) {
-  const el = document.createElement("div");
-  el.className = "msg agent";
-  el.textContent = text;
-  appendChatNode(el);
-}
-
-function addSystemLine(text) {
-  const el = document.createElement("div");
-  el.className = "msg system";
-  el.textContent = text;
-  appendChatNode(el);
-}
-
-function addToolPill(text) {
-  const el = document.createElement("div");
-  el.className = "tool-pill";
-  el.textContent = text;
-  appendChatNode(el);
+  $("chat-thread").appendChild(el);
+  scrollThread();
 }
 
 function ensureTerminal() {
-  if (!state.terminalEl) {
-    state.terminalEl = document.createElement("pre");
-    state.terminalEl.className = "terminal";
-    appendChatNode(state.terminalEl);
-  }
-  return state.terminalEl;
+  if (state.terminalBody) return state.terminalBody;
+  $("empty-state").hidden = true;
+  const block = document.createElement("div");
+  block.className = "terminal-block";
+  block.innerHTML = `<div class="terminal-head">Terminal</div><pre class="terminal-body"></pre>`;
+  $("chat-thread").appendChild(block);
+  state.terminalBody = block.querySelector(".terminal-body");
+  return state.terminalBody;
 }
 
 function appendTerminal(line) {
-  const t = ensureTerminal();
-  t.textContent += `${line}\n`;
-  $("chat-thread").scrollTop = $("chat-thread").scrollHeight;
+  ensureTerminal().textContent += `${line}\n`;
+  scrollThread();
 }
+
+const EMPTY_HTML = `<p class="empty-title">What should we build?</p>
+<p class="empty-body">The agent reads your mounted repo, proposes edits, and waits for your approval before writing files or running commands.</p>
+<ul class="empty-hints"><li>Fix a failing test</li><li>Add an API endpoint</li><li>Refactor a module</li></ul>`;
 
 function clearChat() {
   $("chat-thread").innerHTML = "";
-  state.terminalEl = null;
+  const empty = document.createElement("div");
+  empty.className = "empty-state";
+  empty.id = "empty-state";
+  empty.innerHTML = EMPTY_HTML;
+  $("chat-thread").appendChild(empty);
+  state.terminalBody = null;
   state.seenEventIds.clear();
 }
 
-function ingestEvent(ev, replay = false) {
+function ingestEvent(ev) {
   if (state.seenEventIds.has(ev.id)) return;
   state.seenEventIds.add(ev.id);
 
@@ -122,16 +148,15 @@ function ingestEvent(ev, replay = false) {
   const role = ev.data?.role;
 
   if (type === "message") {
-    if (role === "user") addUserBubble(msg);
-    else addAgentBubble(msg);
+    addTurn(role === "user" ? "user" : "agent", msg);
     return;
   }
   if (type === "log") {
-    addAgentBubble(msg);
+    addTurn("agent", msg);
     return;
   }
   if (type === "tool") {
-    addToolPill(msg);
+    addToolRow(msg);
     return;
   }
   if (type === "command_stdout" || type === "command_stderr") {
@@ -139,23 +164,23 @@ function ingestEvent(ev, replay = false) {
     return;
   }
   if (type === "command_exit") {
-    appendTerminal(`↳ ${msg}`);
+    appendTerminal(`exit ${msg}`);
     return;
   }
   if (type === "error") {
-    addSystemLine(`Error: ${msg}`);
+    addSystemNote(msg);
     return;
   }
   if (type === "done") {
-    addSystemLine(msg);
+    addSystemNote(msg);
     return;
   }
   if (type === "rejected") {
-    addSystemLine(`Rejected${msg ? `: ${msg}` : ""}`);
+    addSystemNote(msg ? `Rejected — ${msg}` : "Changes rejected");
     return;
   }
-  if (type === "status" && !replay) {
-    if (ev.data?.status) setStatus(ev.data.status);
+  if (type === "status" && ev.data?.status) {
+    setStatus(ev.data.status);
   }
   if (type === "awaiting_approval" || type === "proposal") {
     void refreshTask();
@@ -197,10 +222,10 @@ function simpleDiff(oldText, newText) {
     const o = oldLines[i];
     const n = newLines[i];
     if (o === n) {
-      if (n !== undefined) out.push({ t: "ctx", l: n });
+      if (n !== undefined) out.push({ t: "ctx", l: ` ${n}` });
     } else {
-      if (o !== undefined) out.push({ t: "del", l: `- ${o}` });
-      if (n !== undefined) out.push({ t: "add", l: `+ ${n}` });
+      if (o !== undefined) out.push({ t: "del", l: `-${o}` });
+      if (n !== undefined) out.push({ t: "add", l: `+${n}` });
     }
   }
   return out;
@@ -220,8 +245,8 @@ function renderChanges(task) {
   for (const f of p.files) {
     const card = document.createElement("div");
     card.className = "file-card";
-    const tag = f.isNew ? " (new)" : "";
-    card.innerHTML = `<header>${escapeHtml(f.path)}${tag}</header>`;
+    const badge = f.isNew ? `<span class="file-badge">new</span>` : "";
+    card.innerHTML = `<header><span>${escapeHtml(f.path)}</span>${badge}</header>`;
     const pre = document.createElement("pre");
     pre.className = "diff";
     for (const line of simpleDiff(f.previousContent, f.content)) {
@@ -235,7 +260,7 @@ function renderChanges(task) {
   }
   const cmdEl = $("change-commands");
   if (p.commands?.length) {
-    cmdEl.innerHTML = "<strong>After approve</strong><ul></ul>";
+    cmdEl.innerHTML = "<span>Runs after accept</span><ul></ul>";
     const ul = cmdEl.querySelector("ul");
     for (const c of p.commands) {
       const li = document.createElement("li");
@@ -245,27 +270,20 @@ function renderChanges(task) {
   } else {
     cmdEl.innerHTML = "";
   }
-
-  $("approve").disabled = false;
-  $("reject").disabled = false;
 }
 
 async function refreshTask() {
   if (!state.taskId) return;
   const task = await api(`/tasks/${state.taskId}`);
   setStatus(task.status);
-  $("run-title").textContent = task.title || "Agent run";
+  $("run-title").textContent = task.title || "Agent";
   $("run-meta").textContent = task.id;
   $("approve").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
   $("reject").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
   $("undo").disabled = !task.canUndo;
   renderChanges(task);
-
-  if (task.status === "running" || task.status === "executing") {
-    startPoll();
-  } else {
-    stopPoll();
-  }
+  if (task.status === "running" || task.status === "executing") startPoll();
+  else stopPoll();
 }
 
 function startPoll() {
@@ -284,12 +302,16 @@ async function loadRuns() {
   const data = await api("/tasks");
   const list = $("run-list");
   list.innerHTML = "";
+  if (!data.tasks.length) {
+    list.innerHTML = `<li class="system-note" style="text-align:left;padding:8px">No runs yet</li>`;
+    return;
+  }
   for (const run of data.tasks) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `run-item${run.id === state.taskId ? " active" : ""}`;
-    btn.innerHTML = `<div class="run-item-title">${escapeHtml(run.title)}</div><div class="run-item-meta">${escapeHtml(run.status.replace(/_/g, " "))}</div>`;
+    btn.innerHTML = `<div class="run-item-title">${escapeHtml(run.title)}</div><div class="run-item-meta">${escapeHtml((STATUS_LABEL[run.status] ?? run.status).toLowerCase())}</div>`;
     btn.addEventListener("click", () => void openRun(run.id));
     li.appendChild(btn);
     list.appendChild(li);
@@ -307,17 +329,13 @@ async function openRun(taskId) {
   $("run-title").textContent = task.title;
   $("run-meta").textContent = task.id;
   setStatus(task.status);
-  for (const ev of evData.events) {
-    ingestEvent(ev, true);
-  }
+  for (const ev of evData.events) ingestEvent(ev);
   renderChanges(task);
   await loadRuns();
   if (["running", "executing", "awaiting_approval"].includes(task.status)) {
     connectStream(taskId);
   }
-  if (task.status === "running" || task.status === "executing") {
-    startPoll();
-  }
+  if (task.status === "running" || task.status === "executing") startPoll();
 }
 
 function newRun() {
@@ -326,11 +344,17 @@ function newRun() {
   closeStream();
   stopPoll();
   setStatus("idle");
-  $("run-title").textContent = "New agent run";
-  $("run-meta").textContent = "Describe a coding task below";
+  $("run-title").textContent = "New agent";
+  $("run-meta").textContent = "";
   $("changes-panel").hidden = true;
   $("composer-input").focus();
   void loadRuns();
+}
+
+function resizeComposer() {
+  const ta = $("composer-input");
+  ta.style.height = "auto";
+  ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
 }
 
 async function sendMessage() {
@@ -339,27 +363,26 @@ async function sendMessage() {
   $("send-btn").disabled = true;
   try {
     if (!state.taskId) {
-      addUserBubble(text);
       const task = await api("/tasks", {
         method: "POST",
         body: JSON.stringify({ prompt: text }),
       });
       state.taskId = task.id;
       $("composer-input").value = "";
+      resizeComposer();
       setStatus(task.status);
       connectStream(task.id);
       startPoll();
       await loadRuns();
       await refreshTask();
     } else {
-      if (state.status === "awaiting_approval") {
-        throw new Error("Approve or reject pending changes first");
-      }
+      if (state.status === "awaiting_approval") throw new Error("Accept or reject changes first");
       if (state.status === "running" || state.status === "executing") {
         throw new Error("Agent is still working");
       }
-      addUserBubble(text);
+      addTurn("user", text);
       $("composer-input").value = "";
+      resizeComposer();
       await api(`/tasks/${state.taskId}/message`, {
         method: "POST",
         body: JSON.stringify({ message: text }),
@@ -369,7 +392,7 @@ async function sendMessage() {
       startPoll();
     }
   } catch (e) {
-    addSystemLine(e.message);
+    addSystemNote(e.message);
   } finally {
     $("send-btn").disabled = false;
   }
@@ -379,19 +402,19 @@ async function approve() {
   if (!state.taskId) return;
   $("approve").disabled = true;
   try {
-    addSystemLine("Approved — applying changes…");
+    addSystemNote("Accepted — applying to workspace");
+    state.terminalBody = null;
     await api(`/tasks/${state.taskId}/approve`, { method: "POST", body: "{}" });
     connectStream(state.taskId);
     await refreshTask();
   } catch (e) {
-    addSystemLine(e.message);
+    addSystemNote(e.message);
   }
 }
 
 async function reject() {
   if (!state.taskId) return;
-  const feedback = window.prompt("Optional feedback for the agent:") ?? "";
-  $("reject").disabled = true;
+  const feedback = window.prompt("Feedback for the agent (optional):") ?? "";
   try {
     await api(`/tasks/${state.taskId}/reject`, {
       method: "POST",
@@ -400,7 +423,7 @@ async function reject() {
     connectStream(state.taskId);
     await refreshTask();
   } catch (e) {
-    addSystemLine(e.message);
+    addSystemNote(e.message);
   }
 }
 
@@ -408,19 +431,21 @@ async function undoApply() {
   if (!state.taskId) return;
   try {
     const res = await api(`/tasks/${state.taskId}/undo`, { method: "POST", body: "{}" });
-    addSystemLine(`Undid apply: ${(res.files || []).join(", ")}`);
+    addSystemNote(`Reverted ${(res.files || []).join(", ") || "last apply"}`);
     await refreshTask();
   } catch (e) {
-    addSystemLine(e.message);
+    addSystemNote(e.message);
   }
 }
 
 async function loadHealth() {
   try {
     const data = await api("/health");
-    $("workspace").textContent = data.workspace;
+    const el = $("workspace");
+    el.textContent = data.workspace;
+    el.title = data.workspace;
   } catch {
-    $("workspace").textContent = "offline";
+    $("workspace").textContent = "Unavailable";
   }
 }
 
@@ -431,7 +456,7 @@ async function loadSettings() {
   for (const p of data.providers) {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = p.configured ? p.id : `${p.id} (no key)`;
+    opt.textContent = p.configured ? p.id : `${p.id} · no key`;
     if (p.id === data.provider) opt.selected = true;
     select.appendChild(opt);
   }
@@ -449,7 +474,8 @@ async function saveSettings() {
     payload.customBaseUrl = $("custom-base-url").value.trim();
   }
   await api("/settings", { method: "PATCH", body: JSON.stringify(payload) });
-  addSystemLine("Settings saved");
+  $("settings-popover").hidden = true;
+  $("settings-toggle").setAttribute("aria-expanded", "false");
   await loadSettings();
 }
 
@@ -463,6 +489,14 @@ $("provider").addEventListener("change", () => {
   $("custom-url-wrap").hidden = $("provider").value !== "custom";
 });
 
+$("settings-toggle").addEventListener("click", () => {
+  const pop = $("settings-popover");
+  const open = pop.hidden;
+  pop.hidden = !open;
+  $("settings-toggle").setAttribute("aria-expanded", String(open));
+});
+
+$("composer-input").addEventListener("input", resizeComposer);
 $("composer-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -470,7 +504,15 @@ $("composer-input").addEventListener("keydown", (e) => {
   }
 });
 
+document.addEventListener("click", (e) => {
+  const pop = $("settings-popover");
+  if (pop.hidden) return;
+  if (e.target.closest("#settings-popover") || e.target.closest("#settings-toggle")) return;
+  pop.hidden = true;
+  $("settings-toggle").setAttribute("aria-expanded", "false");
+});
+
 void loadHealth();
 void loadSettings();
 void loadRuns();
-newRun();
+setStatus("idle");
