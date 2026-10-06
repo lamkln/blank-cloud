@@ -18,7 +18,7 @@ export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   gemini: "gemini-2.0-flash",
   groq: "llama-3.3-70b-versatile",
   openrouter: "openai/gpt-4o",
-  nim: "meta/llama-3.1-70b-instruct",
+  nim: "meta/llama-3.1-8b-instruct",
   custom: "gpt-4o",
 };
 

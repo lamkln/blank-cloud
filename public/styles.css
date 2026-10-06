@@ -321,6 +321,16 @@ textarea {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-tertiary);
+  max-width: min(560px, 70vw);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.main-header .header-status.failed-detail ~ .header-titles .run-id,
+.run-id.error-text {
+  color: var(--red);
+  font-family: var(--sans);
+  font-size: 11px;
 }
 
 .header-status {
