@@ -419,7 +419,6 @@ async function sendMessage() {
       if (state.status === "running" || state.status === "executing") {
         throw new Error("Agent is still working");
       }
-      addTurn("user", text);
       $("composer-input").value = "";
       resizeComposer();
       await api(`/tasks/${state.taskId}/message`, {

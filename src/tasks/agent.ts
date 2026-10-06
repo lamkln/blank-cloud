@@ -45,11 +45,6 @@ export async function runAgentTurn(taskId: string): Promise<void> {
       messages: task.messages.map((m) => ({ role: m.role, content: m.content })),
       maxSteps: 16,
       tools: buildTools(taskId),
-      onStepFinish: (step) => {
-        if (step.text?.trim()) {
-          emit(taskId, "log", step.text.trim());
-        }
-      },
     });
 
     const refreshed = getTask(taskId);
