@@ -73,10 +73,22 @@ mkdir -p "${INSTALL_DIR}/data"
 
 ENV_FILE="${INSTALL_DIR}/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
+  SESSION_SECRET="$(openssl rand -hex 32 2>/dev/null || true)"
+  if [[ -z "$SESSION_SECRET" ]]; then
+    SESSION_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
   cat >"$ENV_FILE" <<EOF
 # blank-cloud — project mount (keys are set in Web UI → Model)
 BLANK_CLOUD_PROJECT=${PROJECT_DIR}
 BLANK_CLOUD_DATA=${INSTALL_DIR}/data
+SESSION_SECRET=${SESSION_SECRET}
+
+# One-click "Connect GitHub" in the UI (recommended on a shared NAS):
+# 1. Create a GitHub OAuth App → callback URL http://YOUR_IP:8787/auth/github/callback
+# 2. Uncomment and set:
+# GITHUB_OAUTH_CLIENT_ID=
+# GITHUB_OAUTH_CLIENT_SECRET=
+# BLANK_CLOUD_PUBLIC_URL=http://YOUR_IP:8787
 EOF
   echo "Created ${ENV_FILE}"
 else
@@ -98,7 +110,7 @@ Start (background):
 
 API: http://localhost:8787/health
 
-Open http://localhost:8787 → Model (sidebar) to set provider, model, and API keys.
+Open http://localhost:8787 → sidebar **Connect GitHub** (after OAuth env in .env), then pick a repo. Model keys: sidebar **Model**.
 
 EOF
 

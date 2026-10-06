@@ -14,8 +14,7 @@ import {
   rememberOAuthState,
   setSessionCookie,
 } from "../auth/session.js";
-import { updateUser } from "../auth/users.js";
-import { githubNoreplyEmail } from "../repo/github.js";
+import { persistGitHubConnection } from "../auth/connect-github.js";
 
 const auth = new Hono();
 
@@ -51,8 +50,7 @@ auth.get("/github/callback", async (c) => {
     const redirectUri = githubOAuthRedirectUri(c);
     const token = await exchangeGitHubCode(code, redirectUri);
     const ghUser = await fetchGitHubUserWithToken(token);
-    updateUser(ghUser.login, { githubId: ghUser.id, gitToken: token });
-    setSessionCookie(c, ghUser.login);
+    persistGitHubConnection(c, ghUser, token);
     return c.redirect("/?github=connected", 302);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

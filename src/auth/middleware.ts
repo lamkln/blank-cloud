@@ -6,6 +6,7 @@ import {
 } from "./users.js";
 import { getSessionLogin } from "./session.js";
 import { isGitHubOAuthConfigured } from "./github-oauth.js";
+import { usePerUserGitHubStorage } from "./connect-github.js";
 import {
   getRequestUser,
   runWithUserContext,
@@ -40,7 +41,7 @@ export async function attachUserContext(c: Context, next: Next): Promise<Respons
 }
 
 export async function requireGitHubSignIn(c: Context, next: Next): Promise<Response | void> {
-  if (!isGitHubOAuthConfigured()) {
+  if (!usePerUserGitHubStorage()) {
     await next();
     return;
   }
