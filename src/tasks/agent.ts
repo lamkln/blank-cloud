@@ -8,21 +8,23 @@ import {
   WorkspacePathError,
 } from "../workspace/paths.js";
 import { setPendingProposal } from "./proposals.js";
-import { emit, getTask, updateTask } from "./store.js";
+import { appendTaskMessage, emit, getTask, updateTask } from "./store.js";
 import type { TaskRecord } from "./types.js";
 
-const SYSTEM = `You are blank-cloud, a self-hosted coding agent operating inside a Linux container.
-The user's project is mounted at the workspace root. Use tools to inspect files before changing anything.
+const SYSTEM = `You are blank-cloud, a self-hosted coding agent similar to Cursor Cloud Agent.
+You operate inside a Linux container; the user's repository is mounted at the workspace root.
 
-Workflow:
-1. Read and list files to understand the codebase.
-2. When ready to change code, call propose_changes with full file contents for each edited file (paths relative to workspace root).
-3. Optionally include shell commands to run after the user approves (tests, builds). Do not assume commands ran until approval.
-4. After proposing, stop and wait — do not call propose_changes again until the user approves or rejects.
+Behavior:
+- Explore the codebase with list_directory and read_file before editing.
+- Explain your plan briefly in natural language as you work (the user sees a chat UI).
+- When ready to modify files, call propose_changes with FULL file contents for each changed file (paths relative to workspace root).
+- Optional: include shell commands to run after the user approves (tests, lint, build).
+- After calling propose_changes, STOP and wait. The user must approve or reject in the UI.
+- If the user rejects or sends follow-up messages, revise your approach.
 
-Be concise in summaries. Prefer minimal, correct diffs via complete file contents.`;
+Prefer minimal, correct changes. Do not run shell commands yourself except via proposed commands after approval.`;
 
-export async function runAgentTurn(taskId: string, userMessage: string): Promise<void> {
+export async function runAgentTurn(taskId: string): Promise<void> {
   const task = getTask(taskId);
   if (!task) {
     return;
@@ -32,14 +34,14 @@ export async function runAgentTurn(taskId: string, userMessage: string): Promise
     status: "running",
     iteration: task.iteration + 1,
   });
-  emit(taskId, "status", "Agent thinking", { status: "running", iteration: task.iteration + 1 });
+  emit(taskId, "status", "Agent working…", { status: "running", iteration: task.iteration + 1 });
 
   try {
     const result = await generateText({
       model: createLanguageModel(),
       system: SYSTEM,
-      messages: [{ role: "user", content: userMessage }],
-      maxSteps: 12,
+      messages: task.messages.map((m) => ({ role: m.role, content: m.content })),
+      maxSteps: 16,
       tools: buildTools(taskId),
       onStepFinish: (step) => {
         if (step.text?.trim()) {
@@ -50,15 +52,19 @@ export async function runAgentTurn(taskId: string, userMessage: string): Promise
 
     const refreshed = getTask(taskId);
     if (refreshed?.pendingProposal) {
+      if (result.text?.trim()) {
+        appendTaskMessage(taskId, "assistant", result.text.trim(), true);
+      }
       return;
     }
 
-    if (result.text?.trim()) {
-      emit(taskId, "log", result.text.trim());
+    const assistantText = result.text?.trim();
+    if (assistantText) {
+      appendTaskMessage(taskId, "assistant", assistantText, true);
     }
 
     updateTask(taskId, { status: "completed" });
-    emit(taskId, "done", "Task finished without pending changes", { status: "completed" });
+    emit(taskId, "done", "Run finished", { status: "completed" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     updateTask(taskId, { status: "failed", lastError: message });
@@ -74,7 +80,10 @@ function buildTools(taskId: string) {
         path: z.string().describe('Directory path, use "." for workspace root'),
       }),
       execute: async ({ path: dirPath }) => {
-        emit(taskId, "tool", `list_directory ${dirPath}`, { tool: "list_directory", path: dirPath });
+        emit(taskId, "tool", `Listed ${dirPath}`, {
+          tool: "list_directory",
+          path: dirPath,
+        });
         try {
           const entries = listDirectory(dirPath);
           return { entries };
@@ -90,7 +99,7 @@ function buildTools(taskId: string) {
         path: z.string(),
       }),
       execute: async ({ path: filePath }) => {
-        emit(taskId, "tool", `read_file ${filePath}`, { tool: "read_file", path: filePath });
+        emit(taskId, "tool", `Read ${filePath}`, { tool: "read_file", path: filePath });
         try {
           const content = readWorkspaceFile(filePath);
           return { path: filePath, content };
@@ -114,8 +123,9 @@ function buildTools(taskId: string) {
         commands: z.array(z.string()).default([]),
       }),
       execute: async ({ summary, files, commands }) => {
-        emit(taskId, "tool", "propose_changes", {
+        emit(taskId, "tool", `Proposed changes (${files.length} file(s))`, {
           tool: "propose_changes",
+          summary,
           fileCount: files.length,
           commandCount: commands.length,
         });
@@ -135,7 +145,7 @@ function buildTools(taskId: string) {
         });
         return {
           status: "awaiting_approval",
-          message: "Proposal recorded. User must POST /tasks/:id/approve to apply.",
+          message: "Waiting for user approval in the UI.",
         };
       },
     }),
@@ -152,16 +162,20 @@ function formatPathError(e: unknown): string {
   return String(e);
 }
 
-export function buildFailureContinuationPrompt(
-  task: TaskRecord,
-  error: string,
-): string {
+export function buildFailureContinuationUserMessage(task: TaskRecord, error: string): string {
   return [
-    `Original task: ${task.prompt}`,
+    `Original request: ${task.prompt}`,
     "",
-    "After approval, execution failed:",
+    "The last approved changes were applied, but a command failed:",
     error,
     "",
-    "Inspect the workspace and propose a fix with propose_changes.",
+    "Inspect the repo and propose a fix with propose_changes, or explain what went wrong.",
   ].join("\n");
+}
+
+export function buildRejectionUserMessage(feedback?: string): string {
+  if (feedback?.trim()) {
+    return `I rejected the proposed changes. Feedback: ${feedback.trim()}\nPlease try again with a different approach.`;
+  }
+  return "I rejected the proposed changes. Please try a different approach.";
 }

@@ -7,22 +7,18 @@
     <link rel="stylesheet" href="/ui/styles.css" />
   </head>
   <body>
-    <div class="layout">
-      <header class="header">
-        <div class="brand">
-          <h1>blank-cloud</h1>
-          <p class="muted" id="workspace">workspace …</p>
+    <div class="app">
+      <aside class="runs-panel">
+        <div class="runs-header">
+          <div class="logo">blank-cloud</div>
+          <button type="button" class="icon-btn" id="new-run" title="New agent run">+</button>
         </div>
-        <div class="header-meta">
-          <span class="pill" id="health-pill">checking</span>
-        </div>
-      </header>
-
-      <aside class="sidebar">
-        <section class="panel">
-          <h2>Provider</h2>
+        <p class="runs-sub" id="workspace">workspace …</p>
+        <ul class="run-list" id="run-list"></ul>
+        <details class="settings-drawer">
+          <summary>Model &amp; provider</summary>
           <label class="field">
-            <span>Backend</span>
+            <span>Provider</span>
             <select id="provider"></select>
           </label>
           <label class="field">
@@ -30,49 +26,49 @@
             <input id="model" type="text" autocomplete="off" />
           </label>
           <label class="field" id="custom-url-wrap" hidden>
-            <span>Custom base URL</span>
+            <span>Custom OpenAI base URL</span>
             <input id="custom-base-url" type="url" autocomplete="off" />
           </label>
-          <button type="button" class="btn secondary" id="save-settings">Save settings</button>
-          <p class="hint">API keys stay in container env only.</p>
-        </section>
+          <button type="button" class="btn ghost" id="save-settings">Save</button>
+          <p class="hint">Keys live in container env only.</p>
+        </details>
       </aside>
 
-      <main class="main">
-        <section class="panel">
-          <h2>Task</h2>
-          <label class="field">
-            <span>Prompt</span>
-            <textarea
-              id="prompt"
-              rows="4"
-              placeholder="Describe what to change in the mounted project…"
-            ></textarea>
-          </label>
-          <div class="row">
-            <button type="button" class="btn primary" id="run-task">Run agent</button>
-            <span class="status-badge" id="task-status">idle</span>
+      <section class="chat-panel">
+        <header class="chat-header">
+          <div>
+            <h1 id="run-title">New agent run</h1>
+            <p class="run-meta" id="run-meta">Describe a coding task below</p>
           </div>
-        </section>
-
-        <section class="panel proposal" id="proposal-panel" hidden>
-          <div class="row spread">
-            <h2>Proposed changes</h2>
-            <div class="row">
-              <button type="button" class="btn primary" id="approve">Approve</button>
-              <button type="button" class="btn danger" id="undo">Undo last apply</button>
-            </div>
+          <div class="status-chip idle" id="status-chip">idle</div>
+        </header>
+        <div class="chat-thread" id="chat-thread"></div>
+        <footer class="composer">
+          <textarea
+            id="composer-input"
+            rows="2"
+            placeholder="Ask the agent to implement, fix, or refactor code in your mounted project…"
+          ></textarea>
+          <div class="composer-actions">
+            <span class="hint">Enter to send · Shift+Enter for newline</span>
+            <button type="button" class="btn primary" id="send-btn">Send</button>
           </div>
-          <p id="proposal-summary"></p>
-          <div id="proposal-files"></div>
-          <div id="proposal-commands" class="commands"></div>
-        </section>
+        </footer>
+      </section>
 
-        <section class="panel log-panel">
-          <h2>Log</h2>
-          <pre id="log" aria-live="polite"></pre>
-        </section>
-      </main>
+      <aside class="changes-panel" id="changes-panel" hidden>
+        <header class="changes-header">
+          <h2>Changes</h2>
+          <p id="change-summary"></p>
+        </header>
+        <div class="change-actions">
+          <button type="button" class="btn primary" id="approve">Approve</button>
+          <button type="button" class="btn ghost" id="reject">Reject</button>
+          <button type="button" class="btn ghost" id="undo">Undo apply</button>
+        </div>
+        <div id="change-files"></div>
+        <div id="change-commands" class="commands"></div>
+      </aside>
     </div>
     <script src="/ui/app.js" type="module"></script>
   </body>

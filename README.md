@@ -50,7 +50,7 @@ docker compose up --build
 
 The agent listens on **http://localhost:8787**. Your project is mounted at `/workspace` inside the container.
 
-Open **http://localhost:8787/** in a browser for the **Web UI** (task prompt, live log stream, approve/undo proposals, provider settings). The JSON API remains available at the same port (`/health`, `/settings`, `/tasks`, …).
+Open **http://localhost:8787/** for the **Web UI** (Cursor Cloud Agent–style): agent runs in a chat thread, diff review in the side panel, **Approve / Reject**, follow-up messages, and undo. The JSON API remains on the same port.
 
 ## docker-compose.yml
 
@@ -126,8 +126,12 @@ curl -s -X PATCH http://localhost:8787/settings \
 | `GET` | `/health` | Liveness and workspace path |
 | `GET` | `/settings` | Active provider/model and which providers have keys configured |
 | `PATCH` | `/settings` | Change `provider`, `model`, or `customBaseUrl` |
+| `GET` | `/tasks` | List recent agent runs |
 | `POST` | `/tasks` | Body: `{ "prompt": "..." }` → `{ id, status, stream }` |
-| `GET` | `/tasks/:id` | Task status and pending proposal |
+| `GET` | `/tasks/:id` | Run status, chat messages, pending proposal (with diffs) |
+| `GET` | `/tasks/:id/events` | Full event log for the run |
+| `POST` | `/tasks/:id/message` | Follow-up message on the same run |
+| `POST` | `/tasks/:id/reject` | Reject pending proposal (optional `{ "feedback": "..." }`) |
 | `POST` | `/tasks/:id/approve` | Apply pending proposal and run its commands |
 | `POST` | `/tasks/:id/undo` | Undo last applied proposal |
 | `GET` | `/tasks/:id/stream` | Server-Sent Events log stream |
