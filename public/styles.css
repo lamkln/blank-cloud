@@ -136,6 +136,41 @@ textarea {
   margin-bottom: 6px;
 }
 
+.field-compact {
+  margin-bottom: 6px;
+}
+
+.field-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-check input[type="checkbox"] {
+  margin: 0;
+}
+
+.repo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+.repo-status {
+  margin: 0 0 6px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.repo-status.warn {
+  color: var(--danger, #f07070);
+}
+
+.repo-status.ok {
+  color: var(--success, #6bcf7f);
+}
+
 .workspace-path {
   font-family: var(--mono);
   font-size: 11px;

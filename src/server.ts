@@ -8,6 +8,7 @@ import { logger } from "hono/logger";
 import { ensureWorkspace, getPort, getWorkspaceRoot } from "./config.js";
 import { ensureDataDir, loadAppSettings } from "./settings/store.js";
 import { settingsRoutes } from "./routes/settings.js";
+import { repoRoutes } from "./routes/repo.js";
 import { taskRoutes } from "./routes/tasks.js";
 
 ensureWorkspace();
@@ -27,6 +28,7 @@ app.get("/health", (c) =>
 );
 
 app.route("/settings", settingsRoutes);
+app.route("/repo", repoRoutes);
 app.route("/tasks", taskRoutes);
 
 app.get("/", serveStatic({ root: publicRoot, path: "index.html" }));
@@ -46,6 +48,7 @@ app.get("/api", (c) =>
     endpoints: {
       health: "/health",
       settings: "/settings",
+      repo: "/repo",
       tasks: "/tasks",
     },
   }),
