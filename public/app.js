@@ -488,6 +488,27 @@ async function loadHealth() {
 }
 
 let repoSnapshot = null;
+let repoSearchTimer = null;
+let selectedRepoFullName = null;
+
+function renderRepoList(repos, activeFullName) {
+  const list = $("repo-list");
+  list.innerHTML = "";
+  if (!repos?.length) {
+    list.innerHTML = `<li class="fine-print" style="padding:8px">No repositories found.</li>`;
+    return;
+  }
+  for (const r of repos) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    if (r.full_name === activeFullName) btn.classList.add("active");
+    btn.innerHTML = `<div class="repo-item-name">${escapeHtml(r.full_name)}${r.private ? " · private" : ""}</div><div class="repo-item-meta">${escapeHtml(r.default_branch ?? "main")}${r.description ? ` · ${escapeHtml(r.description.slice(0, 60))}` : ""}</div>`;
+    btn.addEventListener("click", () => void selectGitHubRepo(r.full_name));
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+}
 
 function renderRepoStatus(data) {
   repoSnapshot = data;
@@ -497,17 +518,16 @@ function renderRepoStatus(data) {
     el.className = "fine-print repo-status warn";
     return;
   }
-  const mode =
-    data.mode === "remote"
-      ? "Remote clone → ./data/workspace"
-      : "Host mount (BLANK_CLOUD_PROJECT)";
-  let gitLine = "";
-  if (data.git?.isRepo) {
-    gitLine = ` · ${data.git.branch ?? "?"} · ${data.git.clean ? "clean" : `${data.git.changedFiles} changed`}`;
-  } else if (data.mode === "remote" && data.configured?.remoteUrl) {
-    gitLine = " · not cloned yet — click Clone / sync";
+  const selected = data.configured?.githubRepoFullName;
+  selectedRepoFullName = selected || selectedRepoFullName;
+  let line = data.ready ? "Ready — start an agent run." : "Pick a repository below.";
+  if (selected) {
+    line = `${data.ready ? "Ready" : "Selected"}: ${selected} (${data.configured?.branch ?? "main"})`;
   }
-  el.textContent = `${data.ready ? "Ready" : "Not ready"} (${mode})${gitLine}`;
+  if (data.git?.isRepo && !data.git.clean) {
+    line += ` · ${data.git.changedFiles} local change(s)`;
+  }
+  el.textContent = line;
   el.className = `fine-print repo-status ${data.ready ? "ok" : "warn"}`;
   $("workspace").textContent = data.workspace;
   $("workspace").title = data.workspace;
@@ -522,23 +542,107 @@ async function loadRepo() {
     $("repo-bot-name").value = data.configured?.gitAuthorName || "";
     $("repo-bot-email").value = data.configured?.gitAuthorEmail || "";
     $("repo-token").value = "";
+    $("repo-device-github").hidden = !data.githubDeviceFlowAvailable;
+
     const gh = data.github;
     const linkEl = $("repo-github-link");
     if (gh?.login) {
-      linkEl.innerHTML = `Linked GitHub: <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a>${data.configured?.githubLogin ? "" : ""}`;
+      linkEl.innerHTML = `Connected as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — choose a repo:`;
       linkEl.className = "fine-print repo-status ok";
-    } else if (data.configured?.githubLogin) {
-      linkEl.textContent = `Saved bot login @${data.configured.githubLogin} — paste token and Link to verify.`;
-      linkEl.className = "fine-print";
+      $("repo-picker").hidden = false;
+      await refreshGitHubRepoList($("repo-search").value.trim());
     } else {
       linkEl.textContent =
-        "Create a GitHub bot account + PAT (like Cursor Agent), paste token, then Link GitHub bot.";
+        "Paste a GitHub personal access token (repo scope), then Connect GitHub.";
       linkEl.className = "fine-print";
+      $("repo-picker").hidden = true;
     }
     renderRepoStatus(data);
   } catch (e) {
     renderRepoStatus(null);
     $("repo-status").textContent = e.message;
+  }
+}
+
+async function refreshGitHubRepoList(q) {
+  if (!repoSnapshot?.github) return;
+  try {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+    const data = await api(`/repo/github/repos${qs}`);
+    renderRepoList(data.repos, repoSnapshot?.configured?.githubRepoFullName);
+  } catch (e) {
+    addSystemNote(e.message);
+  }
+}
+
+async function connectGitHub() {
+  $("repo-connect-github").disabled = true;
+  try {
+    const token = $("repo-token").value.trim();
+    if (!token) {
+      throw new Error("Paste a GitHub token first (Settings → Developer settings → PAT).");
+    }
+    const res = await api("/repo/github/link", {
+      method: "POST",
+      body: JSON.stringify({ gitToken: token }),
+    });
+    if (res.github?.commitName) $("repo-bot-name").value = res.github.commitName;
+    if (res.github?.commitEmail) $("repo-bot-email").value = res.github.commitEmail;
+    $("repo-picker").hidden = false;
+    renderRepoList(res.repos, null);
+    await loadRepo();
+    addSystemNote(`GitHub connected as @${res.github.login}. Select a repository.`);
+  } catch (e) {
+    addSystemNote(e.message);
+  } finally {
+    $("repo-connect-github").disabled = false;
+  }
+}
+
+async function selectGitHubRepo(fullName) {
+  try {
+    $("repo-status").textContent = `Cloning ${fullName}…`;
+    const res = await api("/repo/github/select", {
+      method: "POST",
+      body: JSON.stringify({ fullName, sync: true }),
+    });
+    selectedRepoFullName = fullName;
+    await loadRepo();
+    addSystemNote(`Workspace ready: ${fullName} (${res.selected?.branch})`);
+  } catch (e) {
+    addSystemNote(e.message);
+    await loadRepo();
+  }
+}
+
+async function startGitHubDeviceSignIn() {
+  $("repo-device-github").disabled = true;
+  try {
+    const start = await api("/repo/github/device/start", { method: "POST", body: "{}" });
+    addSystemNote(`Open ${start.verification_uri} and enter code ${start.user_code}`);
+    window.open(start.verification_uri, "_blank", "noopener");
+    const intervalMs = (start.interval || 5) * 1000;
+    let pending = true;
+    while (pending) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      const poll = await api("/repo/github/device/poll", {
+        method: "POST",
+        body: JSON.stringify({ deviceCode: start.device_code }),
+      });
+      if (poll.status === "pending" || poll.status === "slow_down") continue;
+      if (poll.status === "ok") {
+        pending = false;
+        $("repo-picker").hidden = false;
+        renderRepoList(poll.repos, null);
+        await loadRepo();
+        addSystemNote(`Signed in as @${poll.github.login}. Select a repository.`);
+        break;
+      }
+    }
+  } catch (e) {
+    addSystemNote(e.message);
+  } finally {
+    $("repo-device-github").disabled = false;
   }
 }
 
@@ -556,31 +660,13 @@ async function saveRepo() {
   await loadRepo();
 }
 
-async function linkGitHubBot() {
-  $("repo-link-github").disabled = true;
-  try {
-    await saveRepo();
-    const token = $("repo-token").value.trim();
-    const body = token ? { gitToken: token } : {};
-    const res = await api("/repo/github/link", { method: "POST", body: JSON.stringify(body) });
-    if (res.github?.commitName) $("repo-bot-name").value = res.github.commitName;
-    if (res.github?.commitEmail) $("repo-bot-email").value = res.github.commitEmail;
-    await loadRepo();
-    addSystemNote(`GitHub bot linked as @${res.github.login}`);
-  } catch (e) {
-    addSystemNote(e.message);
-  } finally {
-    $("repo-link-github").disabled = false;
-  }
-}
-
 async function syncRepo() {
   $("repo-sync").disabled = true;
   try {
     await saveRepo();
     const res = await api("/repo/sync", { method: "POST", body: "{}" });
     await loadRepo();
-    addSystemNote(`Repository ${res.action}: ${res.branch} @ ${res.workspace}`);
+    addSystemNote(`Repository ${res.action}: ${res.branch}`);
   } catch (e) {
     addSystemNote(e.message);
     await loadRepo();
@@ -752,7 +838,12 @@ $("test-settings").addEventListener("click", () => void testSettingsConnection()
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
 $("repo-save").addEventListener("click", () => void saveRepo());
 $("repo-sync").addEventListener("click", () => void syncRepo());
-$("repo-link-github").addEventListener("click", () => void linkGitHubBot());
+$("repo-connect-github").addEventListener("click", () => void connectGitHub());
+$("repo-device-github").addEventListener("click", () => void startGitHubDeviceSignIn());
+$("repo-search").addEventListener("input", () => {
+  clearTimeout(repoSearchTimer);
+  repoSearchTimer = setTimeout(() => void refreshGitHubRepoList($("repo-search").value.trim()), 250);
+});
 $("provider").addEventListener("change", () => {
   onProviderChange();
   setSettingsStatus("", null);

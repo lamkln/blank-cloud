@@ -157,6 +157,62 @@ textarea {
   margin: 6px 0 8px;
 }
 
+.repo-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0f0f0f;
+}
+
+.repo-list li {
+  margin: 0;
+}
+
+.repo-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+.repo-list button:hover,
+.repo-list button.active {
+  background: var(--bg-hover);
+}
+
+.repo-list .repo-item-name {
+  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.repo-list .repo-item-meta {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.repo-advanced {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.repo-advanced summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
 .repo-status {
   margin: 0 0 6px;
   line-height: 1.4;

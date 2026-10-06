@@ -11,7 +11,12 @@ import {
 import {
   defaultBotDisplayName,
   fetchGitHubUser,
+  getGitHubOAuthClientId,
+  getRepoByFullName,
   githubNoreplyEmail,
+  listUserRepos,
+  pollGitHubDeviceFlow,
+  startGitHubDeviceFlow,
 } from "../repo/github.js";
 import {
   loadAppSettings,
@@ -30,11 +35,21 @@ const patchSchema = z.object({
   gitAuthorName: z.string().optional(),
   gitAuthorEmail: z.string().optional(),
   githubLogin: z.string().optional(),
+  githubRepoFullName: z.string().optional(),
 });
 
 const linkSchema = z.object({
   gitToken: z.string().optional(),
   botDisplayName: z.string().optional(),
+});
+
+const selectSchema = z.object({
+  fullName: z.string().min(3),
+  sync: z.boolean().optional(),
+});
+
+const devicePollSchema = z.object({
+  deviceCode: z.string().min(1),
 });
 
 repo.get("/", async (c) => {
@@ -64,6 +79,7 @@ repo.get("/", async (c) => {
           suggestedEmail: githubNoreplyEmail(github.id, github.login),
         }
       : null,
+    githubDeviceFlowAvailable: Boolean(getGitHubOAuthClientId()),
     git,
     ready: isWorkspaceReady(root, usesRemoteRepo(settings)),
   });
@@ -91,11 +107,99 @@ repo.patch("/", async (c) => {
   if (data.gitAuthorName !== undefined) repoPatch.gitAuthorName = data.gitAuthorName.trim();
   if (data.gitAuthorEmail !== undefined) repoPatch.gitAuthorEmail = data.gitAuthorEmail.trim();
   if (data.githubLogin !== undefined) repoPatch.githubLogin = data.githubLogin.trim();
+  if (data.githubRepoFullName !== undefined) {
+    repoPatch.githubRepoFullName = data.githubRepoFullName.trim();
+  }
 
   const next = updateAppSettings({ repo: repoPatch });
   const root = getWorkspaceRoot();
   await applyGitIdentity(root, next.repo).catch(() => {});
   return c.json({ configured: maskedRepo(next) });
+});
+
+repo.get("/github/repos", async (c) => {
+  const settings = loadAppSettings();
+  const token = settings.repo.gitToken.trim();
+  if (!token) {
+    return c.json({ error: "Connect GitHub first (token required)" }, 401);
+  }
+  const q = c.req.query("q") ?? "";
+  const page = Number(c.req.query("page") ?? "1") || 1;
+  try {
+    const repos = await listUserRepos(token, { page, perPage: 50, q });
+    return c.json({ repos, page, count: repos.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
+  }
+});
+
+repo.post("/github/select", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = selectSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid body", details: parsed.error.flatten() }, 400);
+  }
+
+  const settings = loadAppSettings();
+  const token = settings.repo.gitToken.trim();
+  if (!token) {
+    return c.json({ error: "Connect GitHub first" }, 401);
+  }
+
+  const fullName = parsed.data.fullName.trim();
+  let meta;
+  try {
+    meta = await getRepoByFullName(token, fullName);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
+  }
+
+  const branch = meta.default_branch || "main";
+  const remoteUrl = meta.clone_url || `https://github.com/${fullName}.git`;
+
+  const next = updateAppSettings({
+    repo: {
+      remoteUrl,
+      branch,
+      githubRepoFullName: fullName,
+    },
+  });
+
+  const root = getWorkspaceRoot();
+  let syncResult: Awaited<ReturnType<typeof syncRepository>> | null = null;
+  if (parsed.data.sync !== false) {
+    try {
+      syncResult = await syncRepository(root, next.repo);
+      await applyGitIdentity(root, next.repo);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json(
+        {
+          error: message,
+          configured: maskedRepo(next),
+          selected: { fullName, branch, remoteUrl },
+        },
+        400,
+      );
+    }
+  }
+
+  const git = await getGitStatus(root);
+  return c.json({
+    ok: true,
+    selected: { fullName, branch, remoteUrl },
+    sync: syncResult,
+    configured: maskedRepo(next),
+    git,
+    ready: isWorkspaceReady(root, true),
+  });
 });
 
 repo.post("/github/link", async (c) => {
@@ -113,7 +217,7 @@ repo.post("/github/link", async (c) => {
   const settings = loadAppSettings();
   const token = parsed.data.gitToken?.trim() || settings.repo.gitToken.trim();
   if (!token) {
-    return c.json({ error: "Save a GitHub personal access token first" }, 400);
+    return c.json({ error: "Paste a GitHub token, then Connect" }, 400);
   }
 
   let user;
@@ -139,6 +243,13 @@ repo.post("/github/link", async (c) => {
   const root = getWorkspaceRoot();
   await applyGitIdentity(root, next.repo).catch(() => {});
 
+  let repos: Awaited<ReturnType<typeof listUserRepos>> = [];
+  try {
+    repos = await listUserRepos(token, { perPage: 30 });
+  } catch {
+    /* list optional on link */
+  }
+
   return c.json({
     ok: true,
     github: {
@@ -150,14 +261,95 @@ repo.post("/github/link", async (c) => {
       commitEmail: botEmail,
       commitName: botName,
     },
+    repos,
     configured: maskedRepo(next),
   });
+});
+
+repo.post("/github/device/start", async (c) => {
+  const clientId = getGitHubOAuthClientId();
+  if (!clientId) {
+    return c.json(
+      {
+        error:
+          "GitHub device sign-in is not configured. Set GITHUB_OAUTH_CLIENT_ID on the server, or use a personal access token.",
+      },
+      501,
+    );
+  }
+  try {
+    const flow = await startGitHubDeviceFlow(clientId);
+    return c.json({
+      user_code: flow.user_code,
+      verification_uri: flow.verification_uri,
+      device_code: flow.device_code,
+      expires_in: flow.expires_in,
+      interval: flow.interval,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
+  }
+});
+
+repo.post("/github/device/poll", async (c) => {
+  const clientId = getGitHubOAuthClientId();
+  if (!clientId) {
+    return c.json({ error: "Device flow not configured" }, 501);
+  }
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = devicePollSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "deviceCode required" }, 400);
+  }
+  try {
+    const result = await pollGitHubDeviceFlow(clientId, parsed.data.deviceCode);
+    if ("pending" in result && result.pending) {
+      return c.json({ status: "pending" });
+    }
+    if ("slowDown" in result && result.slowDown) {
+      return c.json({ status: "slow_down" });
+    }
+    if (!("access_token" in result)) {
+      return c.json({ status: "pending" });
+    }
+    const accessToken = result.access_token;
+    const user = await fetchGitHubUser(accessToken);
+    const botEmail = githubNoreplyEmail(user.id, user.login);
+    const next = updateAppSettings({
+      repo: {
+        gitToken: accessToken,
+        githubLogin: user.login,
+        gitAuthorName: defaultBotDisplayName(user),
+        gitAuthorEmail: botEmail,
+      },
+    });
+    const repos = await listUserRepos(accessToken, { perPage: 30 });
+    return c.json({
+      status: "ok",
+      github: {
+        login: user.login,
+        html_url: user.html_url,
+        avatar_url: user.avatar_url,
+      },
+      repos,
+      configured: maskedRepo(next),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message, status: "error" }, 400);
+  }
 });
 
 repo.post("/sync", async (c) => {
   const settings = loadAppSettings();
   if (!settings.repo.remoteUrl.trim()) {
-    return c.json({ error: "Save a repository URL first" }, 400);
+    return c.json({ error: "Select a repository first" }, 400);
   }
   const root = getWorkspaceRoot();
   try {
