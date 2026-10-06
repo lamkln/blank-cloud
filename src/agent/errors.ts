@@ -1,4 +1,9 @@
-export function formatAgentError(err: unknown): string {
+import type { LlmProvider } from "../config.js";
+
+export function formatAgentError(
+  err: unknown,
+  context?: { provider?: LlmProvider },
+): string {
   if (!err || typeof err !== "object") {
     return String(err);
   }
@@ -11,7 +16,7 @@ export function formatAgentError(err: unknown): string {
   };
 
   let detail = e.message || "Unknown error";
-  let statusCode = e.statusCode;
+  const statusCode = e.statusCode;
 
   if (e.responseBody) {
     try {
@@ -42,9 +47,17 @@ export function formatAgentError(err: unknown): string {
   }
 
   if (statusCode === 410 || detail.toLowerCase() === "gone") {
+    if (context?.provider === "nim") {
+      return (
+        "NVIDIA NIM returned HTTP 410 Gone on chat completions. " +
+        "This is usually an account permission issue (not a wrong model id): your build.nvidia.com org may lack " +
+        '"Public API Endpoints" — email help@build.nvidia.com with your login email and API key prefix, or use ' +
+        "self-hosted NIM on your LAN (base URL like http://HOST:8000/v1). Use Settings → Test connection after saving."
+      );
+    }
     return (
-      "LLM API returned HTTP 410 Gone — that model or endpoint is no longer available. " +
-      "In Settings, pick a current model id (for NVIDIA NIM, use a model from build.nvidia.com) and confirm the base URL."
+      "LLM API returned HTTP 410 Gone — that endpoint is not available for your account. " +
+      "Check provider, model, and base URL in Settings."
     );
   }
 

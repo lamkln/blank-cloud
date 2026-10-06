@@ -1,8 +1,12 @@
+import { generateText } from "ai";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { LlmProvider } from "../config.js";
 import { getRuntimeSettings } from "../config.js";
+import { formatAgentError } from "../agent/errors.js";
+import { createLanguageModel } from "../providers/model.js";
 import {
+  getNimBaseUrl,
   loadAppSettings,
   maskedKeys,
   updateAppSettings,
@@ -44,6 +48,64 @@ settings.get("/", (c) => {
     keys: maskedKeys(app),
     storage: "settings.json in BLANK_CLOUD_DATA (Web UI)",
   });
+});
+
+settings.get("/nim/models", async (c) => {
+  const app = loadAppSettings();
+  const key = app.keys.nim.trim();
+  if (!key) {
+    return c.json({ error: "Save an NVIDIA NIM API key first" }, 400);
+  }
+  const base = getNimBaseUrl(app).replace(/\/$/, "");
+  const res = await fetch(`${base}/models`, {
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    return c.json(
+      {
+        error: `Could not list models (HTTP ${res.status})`,
+        detail: text.slice(0, 300),
+        base,
+      },
+      502,
+    );
+  }
+  let ids: string[] = [];
+  try {
+    const json = JSON.parse(text) as { data?: { id: string }[] };
+    ids = (json.data ?? []).map((m) => m.id).filter(Boolean).sort();
+  } catch {
+    return c.json({ error: "Unexpected models response from NIM" }, 502);
+  }
+  return c.json({ base, models: ids });
+});
+
+settings.post("/test", async (c) => {
+  const runtime = getRuntimeSettings();
+  try {
+    const result = await generateText({
+      model: createLanguageModel(),
+      prompt: "Reply with exactly: OK",
+      maxTokens: 16,
+    });
+    return c.json({
+      ok: true,
+      provider: runtime.provider,
+      model: runtime.model,
+      reply: result.text.trim().slice(0, 200),
+    });
+  } catch (err) {
+    return c.json(
+      {
+        ok: false,
+        provider: runtime.provider,
+        model: runtime.model,
+        error: formatAgentError(err, { provider: runtime.provider }),
+      },
+      400,
+    );
+  }
 });
 
 settings.patch("/", async (c) => {

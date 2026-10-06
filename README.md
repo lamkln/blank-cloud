@@ -128,7 +128,9 @@ curl -s -X PATCH http://localhost:8787/settings \
 | `GET` | `/` | Web UI |
 | `GET` | `/health` | Liveness and workspace path |
 | `GET` | `/settings` | Active provider/model and which providers have keys configured |
-| `PATCH` | `/settings` | Change `provider`, `model`, or `customBaseUrl` |
+| `PATCH` | `/settings` | Change `provider`, `model`, `customBaseUrl`, or API keys |
+| `GET` | `/settings/nim/models` | List model ids from saved NIM key + base URL |
+| `POST` | `/settings/test` | Minimal chat completion test for active provider |
 | `GET` | `/tasks` | List recent agent runs |
 | `POST` | `/tasks` | Body: `{ "prompt": "..." }` → `{ id, status, stream }` |
 | `GET` | `/tasks/:id` | Run status, chat messages, pending proposal (with diffs) |
@@ -158,6 +160,25 @@ curl -s -X POST "http://localhost:8787/tasks/$ID/approve" | jq
 # Revert last apply if needed:
 curl -s -X POST "http://localhost:8787/tasks/$ID/undo" | jq
 ```
+
+## Troubleshooting
+
+### NVIDIA NIM: HTTP 410 Gone
+
+If chat fails with **410 Gone** while **`GET /settings/nim/models`** still works, NVIDIA’s hosted integrate API is rejecting chat for your account (not necessarily a wrong model id). Common fixes:
+
+1. Ask NVIDIA to enable **Public API Endpoints** for your build.nvidia.com organization — email [help@build.nvidia.com](mailto:help@build.nvidia.com) with your login email and the first characters of your API key.
+2. Use **self-hosted NIM** on your LAN and set the base URL to `http://HOST:8000/v1` (OpenAI-compatible).
+3. In the Web UI: **Save settings**, **Load NIM models**, pick a listed model, then **Test connection** before starting an agent run.
+
+```bash
+curl -s -X POST http://localhost:8787/settings/test
+curl -s http://localhost:8787/settings/nim/models | jq
+```
+
+### Agent run “not found” after restart
+
+Tasks live in memory until the container restarts. Start a new run with **+** in the sidebar.
 
 ## Development (without Docker)
 

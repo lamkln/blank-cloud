@@ -251,6 +251,31 @@ textarea {
   font-size: 10px;
 }
 
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.settings-status {
+  margin: 0 0 8px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.settings-status.ok {
+  color: var(--success, #6bcf7f);
+}
+
+.settings-status.err {
+  color: var(--danger, #f07070);
+}
+
+.nim-help a {
+  color: var(--accent, #7eb8ff);
+}
+
 .settings-popover[hidden] {
   display: none;
 }
