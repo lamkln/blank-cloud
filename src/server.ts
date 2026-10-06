@@ -6,10 +6,13 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { ensureWorkspace, getPort, getWorkspaceRoot } from "./config.js";
+import { ensureDataDir, loadAppSettings } from "./settings/store.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { taskRoutes } from "./routes/tasks.js";
 
 ensureWorkspace();
+ensureDataDir();
+loadAppSettings();
 
 const appRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const publicRoot = path.join(appRoot, "public");

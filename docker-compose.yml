@@ -6,10 +6,12 @@ services:
       - "8787:8787"
     volumes:
       - ${BLANK_CLOUD_PROJECT:-./project}:/workspace
+      - ${BLANK_CLOUD_DATA:-./data}:/app/data
     environment:
       PORT: "8787"
       WORKSPACE: /workspace
-      # Provider: openai | anthropic | gemini | groq | openrouter | custom
+      BLANK_CLOUD_DATA: /app/data
+      # Optional bootstrap (overridden after you save in Web UI Settings)
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       LLM_MODEL: ${LLM_MODEL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

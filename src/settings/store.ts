@@ -1,0 +1,192 @@
+import fs from "node:fs";
+import path from "node:path";
+
+export type LlmProvider =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "groq"
+  | "openrouter"
+  | "custom";
+
+export const DEFAULT_MODELS: Record<LlmProvider, string> = {
+  openai: "gpt-4o",
+  anthropic: "claude-sonnet-4-20250514",
+  gemini: "gemini-2.0-flash",
+  groq: "llama-3.3-70b-versatile",
+  openrouter: "openai/gpt-4o",
+  custom: "gpt-4o",
+};
+
+export function parseProvider(raw: string | undefined): LlmProvider {
+  const v = (raw ?? "openai").toLowerCase();
+  if (
+    v === "openai" ||
+    v === "anthropic" ||
+    v === "gemini" ||
+    v === "groq" ||
+    v === "openrouter" ||
+    v === "custom"
+  ) {
+    return v;
+  }
+  return "openai";
+}
+
+export interface ProviderKeys {
+  openai: string;
+  anthropic: string;
+  gemini: string;
+  groq: string;
+  openrouter: string;
+  customApiKey: string;
+}
+
+export interface AppSettings {
+  provider: LlmProvider;
+  model: string;
+  customBaseUrl: string;
+  keys: ProviderKeys;
+}
+
+const KEY_FIELDS: Record<LlmProvider, keyof ProviderKeys | "customBaseUrl"> = {
+  openai: "openai",
+  anthropic: "anthropic",
+  gemini: "gemini",
+  groq: "groq",
+  openrouter: "openrouter",
+  custom: "customApiKey",
+};
+
+let cached: AppSettings | null = null;
+
+export function getDataDir(): string {
+  return path.resolve(process.env.BLANK_CLOUD_DATA || "/app/data");
+}
+
+function settingsPath(): string {
+  return path.join(getDataDir(), "settings.json");
+}
+
+function keysFromEnv(): ProviderKeys {
+  return {
+    openai: process.env.OPENAI_API_KEY?.trim() || "",
+    anthropic: process.env.ANTHROPIC_API_KEY?.trim() || "",
+    gemini: process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || "",
+    groq: process.env.GROQ_API_KEY?.trim() || "",
+    openrouter: process.env.OPENROUTER_API_KEY?.trim() || "",
+    customApiKey: process.env.CUSTOM_OPENAI_API_KEY?.trim() || "",
+  };
+}
+
+function defaultSettings(): AppSettings {
+  const provider = parseProvider(process.env.LLM_PROVIDER);
+  return {
+    provider,
+    model: process.env.LLM_MODEL?.trim() || DEFAULT_MODELS[provider],
+    customBaseUrl: process.env.CUSTOM_OPENAI_BASE_URL?.trim() || "",
+    keys: keysFromEnv(),
+  };
+}
+
+export function ensureDataDir(): void {
+  const dir = getDataDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+export function loadAppSettings(): AppSettings {
+  if (cached) {
+    return cached;
+  }
+  ensureDataDir();
+  const file = settingsPath();
+  if (fs.existsSync(file)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<AppSettings>;
+      const base = defaultSettings();
+      cached = {
+        provider: parseProvider(raw.provider ?? base.provider),
+        model: raw.model?.trim() || base.model,
+        customBaseUrl: raw.customBaseUrl?.trim() ?? base.customBaseUrl,
+        keys: { ...base.keys, ...(raw.keys ?? {}) },
+      };
+      return cached;
+    } catch {
+      /* fall through */
+    }
+  }
+  cached = defaultSettings();
+  persistAppSettings(cached);
+  return cached;
+}
+
+export function persistAppSettings(settings: AppSettings): void {
+  ensureDataDir();
+  cached = settings;
+  fs.writeFileSync(settingsPath(), `${JSON.stringify(settings, null, 2)}\n`, {
+    mode: 0o600,
+  });
+}
+
+export function updateAppSettings(
+  partial: Partial<Omit<AppSettings, "keys">> & {
+    keys?: Partial<ProviderKeys>;
+  },
+): AppSettings {
+  const current = loadAppSettings();
+  const next: AppSettings = {
+    ...current,
+    ...partial,
+    keys: { ...current.keys, ...(partial.keys ?? {}) },
+  };
+  if (partial.provider && !partial.model) {
+    next.model = DEFAULT_MODELS[partial.provider];
+  }
+  persistAppSettings(next);
+  return next;
+}
+
+export function getApiKeyForProvider(provider: LlmProvider, settings = loadAppSettings()): string {
+  const field = KEY_FIELDS[provider];
+  if (field === "customBaseUrl") {
+    return settings.keys.customApiKey;
+  }
+  return settings.keys[field];
+}
+
+export function isProviderConfigured(provider: LlmProvider, settings = loadAppSettings()): boolean {
+  if (provider === "custom") {
+    return Boolean(settings.customBaseUrl.trim() && settings.keys.customApiKey.trim());
+  }
+  return Boolean(getApiKeyForProvider(provider, settings).trim());
+}
+
+export function maskSecret(value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  if (v.length <= 6) return "••••••";
+  return `${v.slice(0, 4)}…${v.slice(-4)}`;
+}
+
+export function maskedKeys(settings: AppSettings): Record<keyof ProviderKeys, string | null> {
+  return {
+    openai: maskSecret(settings.keys.openai),
+    anthropic: maskSecret(settings.keys.anthropic),
+    gemini: maskSecret(settings.keys.gemini),
+    groq: maskSecret(settings.keys.groq),
+    openrouter: maskSecret(settings.keys.openrouter),
+    customApiKey: maskSecret(settings.keys.customApiKey),
+  };
+}
+
+export function listProvidersPublic(settings = loadAppSettings()) {
+  return (Object.keys(DEFAULT_MODELS) as LlmProvider[]).map((id) => ({
+    id,
+    configured: isProviderConfigured(id, settings),
+    defaultModel: DEFAULT_MODELS[id],
+  }));
+}
+
+export { KEY_FIELDS };

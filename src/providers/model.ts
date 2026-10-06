@@ -5,8 +5,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import {
   assertProviderConfigured,
+  getProviderApiKey,
   getRuntimeSettings,
-  type LlmProvider,
 } from "../config.js";
 
 export function createLanguageModel(): LanguageModel {
@@ -15,28 +15,28 @@ export function createLanguageModel(): LanguageModel {
 
   switch (provider) {
     case "openai": {
-      const openai = createOpenAI({ apiKey: requiredEnv("OPENAI_API_KEY") });
+      const openai = createOpenAI({ apiKey: requireKey(getProviderApiKey("openai")) });
       return openai(model);
     }
     case "anthropic": {
       const anthropic = createAnthropic({
-        apiKey: requiredEnv("ANTHROPIC_API_KEY"),
+        apiKey: requireKey(getProviderApiKey("anthropic")),
       });
       return anthropic(model);
     }
     case "gemini": {
       const google = createGoogleGenerativeAI({
-        apiKey: requiredEnv("GOOGLE_GENERATIVE_AI_API_KEY"),
+        apiKey: requireKey(getProviderApiKey("gemini")),
       });
       return google(model);
     }
     case "groq": {
-      const groq = createGroq({ apiKey: requiredEnv("GROQ_API_KEY") });
+      const groq = createGroq({ apiKey: requireKey(getProviderApiKey("groq")) });
       return groq(model);
     }
     case "openrouter": {
       const openrouter = createOpenAI({
-        apiKey: requiredEnv("OPENROUTER_API_KEY"),
+        apiKey: requireKey(getProviderApiKey("openrouter")),
         baseURL: "https://openrouter.ai/api/v1",
         headers: {
           "HTTP-Referer": "https://github.com/blank-cloud",
@@ -46,9 +46,12 @@ export function createLanguageModel(): LanguageModel {
       return openrouter(model);
     }
     case "custom": {
-      const base = customBaseUrl || requiredEnv("CUSTOM_OPENAI_BASE_URL");
+      const base = customBaseUrl.trim();
+      if (!base) {
+        throw new Error("Custom provider requires a base URL in Settings.");
+      }
       const openai = createOpenAI({
-        apiKey: requiredEnv("CUSTOM_OPENAI_API_KEY"),
+        apiKey: requireKey(getProviderApiKey("custom")),
         baseURL: base.replace(/\/$/, ""),
       });
       return openai(model);
@@ -58,10 +61,10 @@ export function createLanguageModel(): LanguageModel {
   }
 }
 
-function requiredEnv(name: string): string {
-  const v = process.env[name];
+function requireKey(value: string): string {
+  const v = value.trim();
   if (!v) {
-    throw new Error(`Missing environment variable ${name}`);
+    throw new Error("API key missing — set it in Settings (Web UI).");
   }
   return v;
 }

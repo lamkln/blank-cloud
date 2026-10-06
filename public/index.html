@@ -59,8 +59,28 @@
               <span>Base URL</span>
               <input id="custom-base-url" type="url" spellcheck="false" autocomplete="off" />
             </label>
-            <button type="button" class="btn btn-sm" id="save-settings">Save</button>
-            <p class="fine-print">API keys are configured in the container environment.</p>
+            <label class="field">
+              <span id="api-key-label">API key</span>
+              <input
+                id="api-key"
+                type="password"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="Paste key to save or replace"
+              />
+            </label>
+            <p class="fine-print" id="key-hint"></p>
+            <details class="keys-advanced">
+              <summary>All provider keys</summary>
+              <label class="field"><span>OpenAI</span><input data-key="openai" type="password" autocomplete="off" /></label>
+              <label class="field"><span>Anthropic</span><input data-key="anthropic" type="password" autocomplete="off" /></label>
+              <label class="field"><span>Gemini</span><input data-key="gemini" type="password" autocomplete="off" /></label>
+              <label class="field"><span>Groq</span><input data-key="groq" type="password" autocomplete="off" /></label>
+              <label class="field"><span>OpenRouter</span><input data-key="openrouter" type="password" autocomplete="off" /></label>
+              <label class="field"><span>Custom key</span><input data-key="customApiKey" type="password" autocomplete="off" /></label>
+            </details>
+            <button type="button" class="btn btn-sm" id="save-settings">Save settings</button>
+            <p class="fine-print">Stored in <code>/app/data/settings.json</code> on the host (<code>./data</code> by default).</p>
           </div>
         </div>
       </aside>

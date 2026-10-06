@@ -231,6 +231,24 @@ textarea {
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   z-index: 30;
+  max-height: min(70vh, 520px);
+  overflow: auto;
+}
+
+.keys-advanced {
+  margin: 8px 0 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.keys-advanced summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.settings-popover code {
+  font-family: var(--mono);
+  font-size: 10px;
 }
 
 .settings-popover[hidden] {

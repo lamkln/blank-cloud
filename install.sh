@@ -69,22 +69,16 @@ install_or_update_repo() {
 install_or_update_repo
 
 mkdir -p "$PROJECT_DIR"
+mkdir -p "${INSTALL_DIR}/data"
 
 ENV_FILE="${INSTALL_DIR}/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   cat >"$ENV_FILE" <<EOF
-# blank-cloud — edit and add your API key
+# blank-cloud — project mount (keys are set in Web UI → Model)
 BLANK_CLOUD_PROJECT=${PROJECT_DIR}
-LLM_PROVIDER=openai
-OPENAI_API_KEY=
-# ANTHROPIC_API_KEY=
-# GOOGLE_GENERATIVE_AI_API_KEY=
-# GROQ_API_KEY=
-# OPENROUTER_API_KEY=
-# CUSTOM_OPENAI_BASE_URL=
-# CUSTOM_OPENAI_API_KEY=
+BLANK_CLOUD_DATA=${INSTALL_DIR}/data
 EOF
-  echo "Created ${ENV_FILE} — set OPENAI_API_KEY (or another provider) before starting."
+  echo "Created ${ENV_FILE}"
 else
   echo "Using existing ${ENV_FILE}"
 fi
@@ -103,6 +97,8 @@ Start (background):
   cd ${INSTALL_DIR} && docker compose up -d
 
 API: http://localhost:8787/health
+
+Open http://localhost:8787 → Model (sidebar) to set provider, model, and API keys.
 
 EOF
 
