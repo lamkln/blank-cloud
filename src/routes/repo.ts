@@ -9,7 +9,6 @@ import {
   syncRepository,
 } from "../repo/git.js";
 import {
-  defaultBotDisplayName,
   fetchGitHubUser,
   getGitHubOAuthClientId,
   getRepoByFullName,
@@ -19,8 +18,10 @@ import {
   startGitHubDeviceFlow,
 } from "../repo/github.js";
 import {
+  DEFAULT_COMMIT_BRAND_NAME,
   loadAppSettings,
   maskedRepo,
+  resolveCommitBrand,
   updateAppSettings,
   usesRemoteRepo,
 } from "../settings/store.js";
@@ -228,15 +229,15 @@ repo.post("/github/link", async (c) => {
     return c.json({ error: message }, 400);
   }
 
-  const botName = parsed.data.botDisplayName?.trim() || defaultBotDisplayName(user);
   const botEmail = githubNoreplyEmail(user.id, user.login);
+  const brand = resolveCommitBrand(settings.repo);
 
   const next = updateAppSettings({
     repo: {
       gitToken: token,
       githubLogin: user.login,
-      gitAuthorName: botName,
-      gitAuthorEmail: botEmail,
+      gitAuthorName: brand.name || DEFAULT_COMMIT_BRAND_NAME,
+      gitAuthorEmail: brand.email || botEmail,
     },
   });
 
@@ -258,8 +259,8 @@ repo.post("/github/link", async (c) => {
       name: user.name,
       html_url: user.html_url,
       avatar_url: user.avatar_url,
-      commitEmail: botEmail,
-      commitName: botName,
+      commitEmail: next.repo.gitAuthorEmail || botEmail,
+      commitName: next.repo.gitAuthorName,
     },
     repos,
     configured: maskedRepo(next),
@@ -321,12 +322,14 @@ repo.post("/github/device/poll", async (c) => {
     const accessToken = result.access_token;
     const user = await fetchGitHubUser(accessToken);
     const botEmail = githubNoreplyEmail(user.id, user.login);
+    const settings = loadAppSettings();
+    const brand = resolveCommitBrand(settings.repo);
     const next = updateAppSettings({
       repo: {
         gitToken: accessToken,
         githubLogin: user.login,
-        gitAuthorName: defaultBotDisplayName(user),
-        gitAuthorEmail: botEmail,
+        gitAuthorName: brand.name || DEFAULT_COMMIT_BRAND_NAME,
+        gitAuthorEmail: brand.email || botEmail,
       },
     });
     const repos = await listUserRepos(accessToken, { perPage: 30 });
