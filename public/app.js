@@ -479,12 +479,9 @@ async function undoApply() {
 
 async function loadHealth() {
   try {
-    const data = await api("/health");
-    const el = $("workspace");
-    el.textContent = data.workspace;
-    el.title = data.workspace;
+    await api("/health");
   } catch {
-    $("workspace").textContent = "Unavailable";
+    /* ignore */
   }
 }
 
@@ -515,64 +512,45 @@ function renderRepoStatus(data) {
   repoSnapshot = data;
   const el = $("repo-status");
   if (!data) {
-    el.textContent = "Repository status unavailable.";
-    el.className = "fine-print repo-status warn";
+    el.hidden = true;
     return;
   }
+  const connected = Boolean(data.github?.login);
+  if (!connected) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
   const selected = data.configured?.githubRepoFullName;
   selectedRepoFullName = selected || selectedRepoFullName;
-  let line = data.ready ? "Ready — start an agent run." : "Pick a repository below.";
+  let line = data.ready ? "Ready" : "Pick a repository";
   if (selected) {
-    line = `${data.ready ? "Ready" : "Selected"}: ${selected} (${data.configured?.branch ?? "main"})`;
-  }
-  if (data.git?.isRepo && !data.git.clean) {
-    line += ` · ${data.git.changedFiles} local change(s)`;
+    line = `${data.ready ? "Ready" : "Selected"}: ${selected}`;
   }
   el.textContent = line;
   el.className = `fine-print repo-status ${data.ready ? "ok" : "warn"}`;
-  $("workspace").textContent = data.workspace;
-  $("workspace").title = data.workspace;
 }
 
 async function loadRepo() {
   try {
     const data = await api("/repo");
-    const auth = data.auth ?? {};
     const connected = Boolean(data.github?.login);
     const oneClick = Boolean(data.oneClickGitHubConnect);
+    repoSnapshot = data;
 
     $("repo-connect-github").hidden = connected;
     $("repo-logout").hidden = !connected;
-    $("repo-token-wrap").hidden = oneClick;
 
-    $("repo-url").value = data.configured?.remoteUrl || "";
-    $("repo-branch").value = data.configured?.branch || "main";
-    $("repo-push").checked = Boolean(data.configured?.pushOnApprove);
-    $("repo-bot-name").value = data.configured?.gitAuthorName || "";
-    $("repo-bot-email").value = data.configured?.gitAuthorEmail || "";
-    $("repo-token").value = "";
-
-    const gh = data.github;
-    const linkEl = $("repo-github-link");
-    if (gh?.login) {
-      linkEl.innerHTML = `Connected as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — pick a repo:`;
-      linkEl.className = "fine-print repo-status ok";
+    if (connected) {
       $("repo-picker").hidden = false;
       await refreshGitHubRepoList($("repo-search").value.trim());
-    } else if (oneClick) {
-      linkEl.textContent = "Click Connect GitHub — authorize on GitHub, then pick a repository. No token to paste.";
-      linkEl.className = "fine-print";
-      $("repo-picker").hidden = true;
     } else {
-      linkEl.textContent =
-        "Server has no GitHub OAuth yet. Open Advanced and paste a PAT, or set GITHUB_OAUTH_CLIENT_ID in .env.";
-      linkEl.className = "fine-print";
       $("repo-picker").hidden = true;
     }
     renderRepoStatus(data);
   } catch (e) {
     renderRepoStatus(null);
-    $("repo-status").textContent = e.message;
+    addSystemNote(e.message);
   }
 }
 
@@ -594,8 +572,8 @@ async function logoutGitHub() {
 }
 
 async function connectGitHub() {
-  const oneClick = repoSnapshot?.oneClickGitHubConnect;
   const oauth = repoSnapshot?.auth?.oauthEnabled;
+  const oneClick = repoSnapshot?.oneClickGitHubConnect;
   $("repo-connect-github").disabled = true;
   try {
     if (oauth) {
@@ -606,22 +584,9 @@ async function connectGitHub() {
       await startGitHubDeviceSignIn();
       return;
     }
-    const token = $("repo-token").value.trim();
-    if (!token) {
-      throw new Error(
-        "Set GITHUB_OAUTH_CLIENT_ID (+ secret + BLANK_CLOUD_PUBLIC_URL) on the server for one-click Connect, or paste a PAT under Advanced.",
-      );
-    }
-    const res = await api("/repo/github/link", {
-      method: "POST",
-      body: JSON.stringify({ gitToken: token }),
-    });
-    if (res.github?.commitName) $("repo-bot-name").value = res.github.commitName;
-    if (res.github?.commitEmail) $("repo-bot-email").value = res.github.commitEmail;
-    $("repo-picker").hidden = false;
-    renderRepoList(res.repos, null);
-    await loadRepo();
-    addSystemNote(`GitHub connected as @${res.github.login}. Select a repository.`);
+    throw new Error(
+      "Set GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET, and BLANK_CLOUD_PUBLIC_URL in the server .env, then restart.",
+    );
   } catch (e) {
     addSystemNote(e.message);
   } finally {
@@ -670,35 +635,6 @@ async function startGitHubDeviceSignIn() {
     }
   } catch (e) {
     addSystemNote(e.message);
-  }
-}
-
-async function saveRepo() {
-  const payload = {
-    remoteUrl: $("repo-url").value.trim(),
-    branch: $("repo-branch").value.trim() || "main",
-    pushOnApprove: $("repo-push").checked,
-    gitAuthorName: $("repo-bot-name").value.trim(),
-    gitAuthorEmail: $("repo-bot-email").value.trim(),
-  };
-  const token = $("repo-token").value.trim();
-  if (token) payload.gitToken = token;
-  await api("/repo", { method: "PATCH", body: JSON.stringify(payload) });
-  await loadRepo();
-}
-
-async function syncRepo() {
-  $("repo-sync").disabled = true;
-  try {
-    await saveRepo();
-    const res = await api("/repo/sync", { method: "POST", body: "{}" });
-    await loadRepo();
-    addSystemNote(`Repository ${res.action}: ${res.branch}`);
-  } catch (e) {
-    addSystemNote(e.message);
-    await loadRepo();
-  } finally {
-    $("repo-sync").disabled = false;
   }
 }
 
@@ -863,8 +799,6 @@ $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
 $("test-settings").addEventListener("click", () => void testSettingsConnection());
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
-$("repo-save").addEventListener("click", () => void saveRepo());
-$("repo-sync").addEventListener("click", () => void syncRepo());
 $("repo-connect-github").addEventListener("click", () => void connectGitHub());
 $("repo-logout").addEventListener("click", () => void logoutGitHub());
 $("repo-search").addEventListener("input", () => {
