@@ -71,10 +71,12 @@ async function api(path, options = {}) {
         body && typeof body.error === "string" && body.error.trim().length > 0
           ? body.error.trim()
           : null;
-      throw new Error(
-        detailed ||
-          "HTTP 410 Gone — LLM endpoint or model unavailable. Open Model settings and update provider, model, and base URL.",
-      );
+      const provider = settingsSnapshot?.provider;
+      const nim410 =
+        provider === "nim"
+          ? "NVIDIA NIM HTTP 410 — usually missing Public API Endpoints on build.nvidia.com (not wrong model). Email help@build.nvidia.com or use self-hosted NIM. Settings → Save → Test connection."
+          : null;
+      throw new Error(detailed || nim410 || msg);
     }
     throw new Error(`${msg} (HTTP ${res.status})`);
   }
