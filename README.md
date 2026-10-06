@@ -2,6 +2,36 @@
 
 Self-hosted AI coding agent in a single Docker container: chat API, repository tools, and a command runner. No Cursor and no third-party agent cloud — your code and API keys stay on the Linux host.
 
+## Install (curl)
+
+Requires **git**, **Docker**, and **Docker Compose v2** on Linux.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/scripts/install.sh | bash
+```
+
+This clones into `~/blank-cloud` by default, creates `.env`, and builds the `blank-cloud` image. Optional environment variables for the installer:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `BLANK_CLOUD_INSTALL_DIR` | `~/blank-cloud` | Where to clone the repo |
+| `BLANK_CLOUD_PROJECT` | `~/blank-cloud/project` | Host path mounted as `/workspace` |
+| `BLANK_CLOUD_REF` | `main` | Git branch or tag to install |
+| `BLANK_CLOUD_START` | (unset) | Set to `1` to run `docker compose up -d` after build |
+
+Example with your project path and auto-start:
+
+```bash
+BLANK_CLOUD_PROJECT=/home/you/your-app BLANK_CLOUD_START=1 \
+  curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/scripts/install.sh | bash
+```
+
+Edit `~/blank-cloud/.env` to set `OPENAI_API_KEY` (or another provider), then:
+
+```bash
+cd ~/blank-cloud && docker compose up -d
+```
+
 ## Quick start
 
 1. Clone this repository and create a `.env` file next to `docker-compose.yml` (see [API keys](#api-keys)).
