@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -19,6 +20,9 @@ loadAppSettings();
 
 const appRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const publicRoot = path.join(appRoot, "public");
+const appVersion = JSON.parse(
+  fs.readFileSync(path.join(appRoot, "package.json"), "utf8"),
+) as { version?: string };
 
 const app = new Hono();
 
@@ -26,8 +30,21 @@ app.use("*", logger());
 app.use("*", cors());
 app.use("*", attachUserContext);
 
+app.use("*", async (c, next) => {
+  await next();
+  const p = new URL(c.req.url).pathname;
+  if (p === "/" || p.startsWith("/ui/")) {
+    c.header("Cache-Control", "no-cache, must-revalidate");
+  }
+});
+
 app.get("/health", (c) =>
-  c.json({ ok: true, workspace: getWorkspaceRoot() }),
+  c.json({
+    ok: true,
+    version: appVersion.version ?? "0.0.0",
+    ui: "minimal-connect-github",
+    workspace: getWorkspaceRoot(),
+  }),
 );
 
 app.route("/auth", authRoutes);
