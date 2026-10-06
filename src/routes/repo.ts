@@ -18,7 +18,7 @@ import {
   startGitHubDeviceFlow,
 } from "../repo/github.js";
 import { authStatus } from "../auth/middleware.js";
-import { persistGitHubConnection } from "../auth/connect-github.js";
+import { persistGitHubConnection, usePerUserGitHubStorage } from "../auth/connect-github.js";
 import { updateUser } from "../auth/users.js";
 import { getRequestUser } from "../context/request.js";
 import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
@@ -61,11 +61,14 @@ const devicePollSchema = z.object({
 
 repo.get("/", async (c) => {
   const app = loadAppSettings();
+  const sessionUser = getRequestUser();
   const repoSettings = activeRepoSettings();
   const root = getWorkspaceRoot();
   const git = await getGitStatus(root);
   let github: Awaited<ReturnType<typeof fetchGitHubUser>> | null = null;
-  const token = repoSettings.gitToken.trim();
+  const token = usePerUserGitHubStorage()
+    ? (sessionUser?.gitToken.trim() ?? "")
+    : repoSettings.gitToken.trim();
   if (token) {
     try {
       github = await fetchGitHubUser(token);

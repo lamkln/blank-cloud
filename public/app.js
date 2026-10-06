@@ -515,7 +515,10 @@ function renderRepoStatus(data) {
     el.hidden = true;
     return;
   }
-  const connected = Boolean(data.github?.login);
+  const perUser = Boolean(data.oneClickGitHubConnect);
+  const connected = perUser
+    ? Boolean(data.auth?.signedIn)
+    : Boolean(data.github?.login);
   if (!connected) {
     el.hidden = true;
     return;
@@ -534,8 +537,10 @@ function renderRepoStatus(data) {
 async function loadRepo() {
   try {
     const data = await api("/repo");
-    const connected = Boolean(data.github?.login);
-    const oneClick = Boolean(data.oneClickGitHubConnect);
+    const perUser = Boolean(data.oneClickGitHubConnect);
+    const connected = perUser
+      ? Boolean(data.auth?.signedIn)
+      : Boolean(data.github?.login);
     repoSnapshot = data;
 
     $("repo-connect-github").hidden = connected;
@@ -546,6 +551,8 @@ async function loadRepo() {
       await refreshGitHubRepoList($("repo-search").value.trim());
     } else {
       $("repo-picker").hidden = true;
+      $("repo-list").innerHTML = "";
+      $("repo-search").value = "";
     }
     renderRepoStatus(data);
   } catch (e) {
@@ -555,7 +562,12 @@ async function loadRepo() {
 }
 
 async function refreshGitHubRepoList(q) {
-  if (!repoSnapshot?.github) return;
+  if (!repoSnapshot) return;
+  const perUser = Boolean(repoSnapshot.oneClickGitHubConnect);
+  const ok = perUser
+    ? Boolean(repoSnapshot.auth?.signedIn)
+    : Boolean(repoSnapshot.github?.login);
+  if (!ok) return;
   try {
     const qs = q ? `?q=${encodeURIComponent(q)}` : "";
     const data = await api(`/repo/github/repos${qs}`);
@@ -566,9 +578,19 @@ async function refreshGitHubRepoList(q) {
 }
 
 async function logoutGitHub() {
-  await api("/auth/logout", { method: "POST", body: "{}" });
-  await loadRepo();
-  addSystemNote("Signed out of GitHub");
+  $("repo-logout").disabled = true;
+  try {
+    await api("/auth/logout", { method: "POST", body: "{}" });
+    repoSnapshot = null;
+    $("repo-list").innerHTML = "";
+    $("repo-search").value = "";
+    await loadRepo();
+    addSystemNote("Signed out of GitHub");
+  } catch (e) {
+    addSystemNote(e.message);
+  } finally {
+    $("repo-logout").disabled = false;
+  }
 }
 
 async function connectGitHub() {
