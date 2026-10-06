@@ -56,6 +56,7 @@ tasks.get("/:id", (c) => {
     pendingProposal: task.pendingProposal,
     lastError: task.lastError,
     iteration: task.iteration,
+    canUndo: task.undoStack.length > 0,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   });
