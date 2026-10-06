@@ -9,6 +9,8 @@ export type TaskStatus =
 export interface FileChange {
   path: string;
   content: string;
+  previousContent?: string | null;
+  isNew?: boolean;
 }
 
 export interface PendingProposal {
@@ -24,11 +26,22 @@ export interface UndoSnapshot {
   appliedAt: string;
 }
 
+export type ChatRole = "user" | "assistant";
+
+export interface TaskMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  createdAt: string;
+}
+
 export type TaskEventType =
+  | "message"
   | "log"
   | "tool"
   | "proposal"
   | "awaiting_approval"
+  | "rejected"
   | "command_stdout"
   | "command_stderr"
   | "command_exit"
@@ -50,9 +63,11 @@ export interface TaskEvent {
 export interface TaskRecord {
   id: string;
   prompt: string;
+  title: string;
   status: TaskStatus;
   createdAt: string;
   updatedAt: string;
+  messages: TaskMessage[];
   pendingProposal: PendingProposal | null;
   undoStack: UndoSnapshot[];
   lastError: string | null;

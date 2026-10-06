@@ -1,21 +1,36 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
-  buildFailureContinuationPrompt,
+  buildFailureContinuationUserMessage,
+  buildRejectionUserMessage,
   runAgentTurn,
 } from "../tasks/agent.js";
 import { applyProposal, undoLastApply } from "../tasks/proposals.js";
 import { runShellCommands } from "../tasks/runner.js";
+import { taskToJson } from "../tasks/serialize.js";
 import {
+  appendTaskMessage,
   createTask,
   emit,
   getTask,
   listTaskEvents,
+  listTasks,
   subscribe,
   updateTask,
 } from "../tasks/store.js";
 
 const tasks = new Hono();
+
+tasks.get("/", (c) => {
+  const items = listTasks().map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    updatedAt: t.updatedAt,
+    createdAt: t.createdAt,
+  }));
+  return c.json({ tasks: items });
+});
 
 tasks.post("/", async (c) => {
   let body: { prompt?: string; message?: string };
@@ -31,7 +46,7 @@ tasks.post("/", async (c) => {
 
   const task = createTask(prompt);
   queueMicrotask(() => {
-    void runAgentTurn(task.id, prompt);
+    void runAgentTurn(task.id);
   });
 
   return c.json(
@@ -44,22 +59,79 @@ tasks.post("/", async (c) => {
   );
 });
 
+tasks.get("/:id/events", (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!task) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  return c.json({ events: listTaskEvents(task.id) });
+});
+
 tasks.get("/:id", (c) => {
   const task = getTask(c.req.param("id"));
   if (!task) {
     return c.json({ error: "Task not found" }, 404);
   }
-  return c.json({
-    id: task.id,
-    status: task.status,
-    prompt: task.prompt,
-    pendingProposal: task.pendingProposal,
-    lastError: task.lastError,
-    iteration: task.iteration,
-    canUndo: task.undoStack.length > 0,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
+  return c.json(taskToJson(task));
+});
+
+tasks.post("/:id/message", async (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!task) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  if (task.status === "running" || task.status === "executing") {
+    return c.json({ error: "Agent is still working on this run" }, 409);
+  }
+  if (task.pendingProposal) {
+    return c.json({ error: "Approve or reject the pending changes first" }, 409);
+  }
+
+  let body: { message?: string; prompt?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const message = (body.message ?? body.prompt ?? "").trim();
+  if (!message) {
+    return c.json({ error: "message is required" }, 400);
+  }
+
+  appendTaskMessage(task.id, "user", message);
+  queueMicrotask(() => {
+    void runAgentTurn(task.id);
   });
+
+  return c.json({ id: task.id, status: "running" });
+});
+
+tasks.post("/:id/reject", async (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!task) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  if (!task.pendingProposal) {
+    return c.json({ error: "No pending proposal to reject" }, 400);
+  }
+
+  let feedback = "";
+  try {
+    const body = await c.req.json();
+    feedback = (body?.feedback ?? body?.message ?? "").trim();
+  } catch {
+    /* empty body ok */
+  }
+
+  updateTask(task.id, { pendingProposal: null, status: "running" });
+  emit(task.id, "rejected", feedback || "Changes rejected", { feedback });
+
+  appendTaskMessage(task.id, "user", buildRejectionUserMessage(feedback));
+  queueMicrotask(() => {
+    void runAgentTurn(task.id);
+  });
+
+  return c.json({ id: task.id, status: "running" });
 });
 
 tasks.post("/:id/approve", async (c) => {
@@ -79,12 +151,12 @@ tasks.post("/:id/approve", async (c) => {
     return c.json({ error: message }, 400);
   }
 
-  emit(task.id, "log", "Proposal approved; applying changes");
+  emit(task.id, "log", "Changes approved — applying to workspace");
 
   const commands = proposal.commands;
   if (commands.length === 0) {
     updateTask(task.id, { status: "completed" });
-    emit(task.id, "done", "Changes applied (no commands)", { status: "completed" });
+    emit(task.id, "done", "Changes applied", { status: "completed" });
     return c.json({ id: task.id, status: "completed", applied: true, commandsRun: [] });
   }
 
@@ -98,16 +170,19 @@ tasks.post("/:id/approve", async (c) => {
       : `Command failed (${failed.exitCode}): ${failed.command}`;
     updateTask(task.id, { status: "running", lastError: err });
     emit(task.id, "error", err);
-    void runAgentTurn(
+    appendTaskMessage(
       task.id,
-      buildFailureContinuationPrompt(refreshed, err),
+      "user",
+      buildFailureContinuationUserMessage(refreshed, err),
     );
+    queueMicrotask(() => {
+      void runAgentTurn(task.id);
+    });
     return c.json({
       id: task.id,
       status: "running",
       applied: true,
       commandsRun: results,
-      followUp: "Agent proposing fix after command failure",
     });
   }
 
