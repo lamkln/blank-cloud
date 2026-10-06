@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # blank-cloud installer — run via:
-#   curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/HEAD/scripts/install.sh | bash
 set -euo pipefail
 
 REPO_URL="${BLANK_CLOUD_REPO:-https://github.com/lamkln/blank-cloud.git}"
