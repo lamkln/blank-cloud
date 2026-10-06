@@ -63,6 +63,8 @@ export interface RepoSettings {
   gitAuthorEmail: string;
   /** Set when token is verified against api.github.com/user */
   githubLogin: string;
+  /** Set when user picks a repo from GitHub list */
+  githubRepoFullName: string;
 }
 
 export interface AppSettings {
@@ -122,6 +124,7 @@ function repoFromEnv(): RepoSettings {
     gitAuthorName: process.env.BLANK_CLOUD_GIT_AUTHOR_NAME?.trim() || "blank-cloud agent",
     gitAuthorEmail: process.env.BLANK_CLOUD_GIT_AUTHOR_EMAIL?.trim() || "",
     githubLogin: process.env.BLANK_CLOUD_GITHUB_LOGIN?.trim() || "",
+    githubRepoFullName: process.env.BLANK_CLOUD_GITHUB_REPO?.trim() || "",
   };
 }
 
@@ -266,6 +269,7 @@ export function maskedRepo(settings: AppSettings): Omit<RepoSettings, "gitToken"
     gitAuthorName: settings.repo.gitAuthorName,
     gitAuthorEmail: settings.repo.gitAuthorEmail,
     githubLogin: settings.repo.githubLogin,
+    githubRepoFullName: settings.repo.githubRepoFullName,
     gitToken: maskSecret(settings.repo.gitToken),
   };
 }

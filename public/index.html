@@ -30,44 +30,62 @@
 
         <div class="sidebar-section">
           <div class="section-label">Repository</div>
+          <p class="fine-print" id="repo-github-link">Connect GitHub, then pick a repository.</p>
+          <div class="repo-actions">
+            <button type="button" class="btn btn-sm" id="repo-connect-github">Connect GitHub</button>
+            <button type="button" class="btn btn-sm" id="repo-device-github" hidden>Sign in (device)</button>
+          </div>
           <label class="field field-compact">
-            <span>Remote URL</span>
+            <span>GitHub token</span>
             <input
-              id="repo-url"
-              type="text"
-              spellcheck="false"
+              id="repo-token"
+              type="password"
               autocomplete="off"
-              placeholder="github.com/you/repo or org/repo"
+              placeholder="Fine-grained PAT with Repository access"
             />
           </label>
-          <label class="field field-compact">
-            <span>Branch</span>
-            <input id="repo-branch" type="text" spellcheck="false" autocomplete="off" placeholder="main" />
-          </label>
-          <label class="field field-compact">
-            <span>Git token (private repos / push)</span>
-            <input id="repo-token" type="password" autocomplete="off" placeholder="GitHub PAT, leave blank to keep" />
-          </label>
-          <label class="field field-compact field-check">
-            <input id="repo-push" type="checkbox" />
-            <span>Commit &amp; push after approve</span>
-          </label>
-          <label class="field field-compact">
-            <span>Bot name (commit author)</span>
-            <input id="repo-bot-name" type="text" spellcheck="false" autocomplete="off" placeholder="blank-cloud agent" />
-          </label>
-          <label class="field field-compact">
-            <span>Bot email (GitHub noreply)</span>
-            <input id="repo-bot-email" type="email" spellcheck="false" autocomplete="off" placeholder="id+login@users.noreply.github.com" />
-          </label>
-          <div class="repo-actions">
-            <button type="button" class="btn btn-sm" id="repo-save">Save repo</button>
-            <button type="button" class="btn btn-sm" id="repo-sync">Clone / sync</button>
-            <button type="button" class="btn btn-sm" id="repo-link-github">Link GitHub bot</button>
+          <div id="repo-picker" hidden>
+            <label class="field field-compact">
+              <span>Your repositories</span>
+              <input
+                id="repo-search"
+                type="search"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="Search…"
+              />
+            </label>
+            <ul class="repo-list" id="repo-list"></ul>
           </div>
-          <p class="fine-print" id="repo-github-link">Create a GitHub machine user + PAT, paste token above, then Link.</p>
-          <p class="fine-print repo-status" id="repo-status">Connect GitHub or any git remote before starting an agent.</p>
+          <p class="fine-print repo-status" id="repo-status">Select a repo to enable the agent.</p>
           <div class="workspace-path" id="workspace" title="">…</div>
+          <details class="repo-advanced">
+            <summary>Advanced / manual URL</summary>
+            <label class="field field-compact">
+              <span>Remote URL</span>
+              <input id="repo-url" type="text" spellcheck="false" autocomplete="off" />
+            </label>
+            <label class="field field-compact">
+              <span>Branch</span>
+              <input id="repo-branch" type="text" spellcheck="false" autocomplete="off" placeholder="main" />
+            </label>
+            <label class="field field-compact field-check">
+              <input id="repo-push" type="checkbox" />
+              <span>Commit &amp; push after approve</span>
+            </label>
+            <label class="field field-compact">
+              <span>Bot name</span>
+              <input id="repo-bot-name" type="text" spellcheck="false" autocomplete="off" />
+            </label>
+            <label class="field field-compact">
+              <span>Bot email</span>
+              <input id="repo-bot-email" type="email" spellcheck="false" autocomplete="off" />
+            </label>
+            <div class="repo-actions">
+              <button type="button" class="btn btn-sm" id="repo-save">Save</button>
+              <button type="button" class="btn btn-sm" id="repo-sync">Sync only</button>
+            </div>
+          </details>
         </div>
 
         <div class="sidebar-section grow">

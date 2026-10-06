@@ -42,27 +42,26 @@ The installer creates `~/blank-cloud/.env`. Add your API key there, then run `cd
 
 blank-cloud edits a **real git workspace**, not just chat. Two ways to attach a repo:
 
-### 1. Web UI — GitHub or any git remote (recommended)
+### 1. Web UI — connect GitHub & pick a repo (Cursor-style)
 
 In the sidebar **Repository** section:
 
-1. **Remote URL** — `https://github.com/you/app`, `you/app`, or SSH `git@github.com:you/app.git`
-2. **Branch** — e.g. `main`
-3. **Git token** — GitHub PAT (or GitLab token) for **private** clones and **push**
-4. **Save repo** → **Clone / sync** (stores clone under `./data/workspace` on the host)
+1. Create a [GitHub personal access token](https://github.com/settings/tokens) with access to your repositories (fine-grained: **Contents** read/write on selected repos; or classic `repo` scope).
+2. Paste the token → **Connect GitHub** (lists your repos via the GitHub API).
+3. **Search** and **click a repository** — blank-cloud sets branch/URL, clones to `./data/workspace`, and marks the workspace **Ready**.
+4. Optional: **Advanced** → enable **Commit & push after approve**.
 
-Optional: enable **Commit & push after approve** to push applied changes to `origin`.
+Optional **Sign in (device)** appears when the server has `GITHUB_OAUTH_CLIENT_ID` set (OAuth app with device flow enabled).
 
 Env bootstrap (optional):
 
 ```bash
-BLANK_CLOUD_REPO_URL=https://github.com/you/your-app.git
-BLANK_CLOUD_REPO_BRANCH=main
 GITHUB_TOKEN=ghp_...
+GITHUB_OAUTH_CLIENT_ID=Iv1.xxxx   # optional device sign-in
 BLANK_CLOUD_PUSH_ON_APPROVE=1
 ```
 
-When a remote URL is saved, the agent uses **`./data/workspace`** instead of the `BLANK_CLOUD_PROJECT` mount.
+When a repository is selected, the agent uses **`./data/workspace`** instead of the `BLANK_CLOUD_PROJECT` mount.
 
 ### GitHub bot account (like Cursor Agent)
 
@@ -71,8 +70,7 @@ GitHub shows **who pushed** and **commit author** separately. For a dedicated bo
 1. **Create a GitHub account** for the bot (e.g. `your-blank-cloud-bot`) — same idea as [@cursoragent](https://github.com/cursoragent).
 2. **Add the bot to your repo**: Settings → Collaborators (or org team with write access).
 3. **Create a PAT** on the **bot account** (fine-grained: Contents read/write on that repo; or classic `repo` scope).
-4. In blank-cloud **Repository**: paste the PAT → **Link GitHub bot** (verifies via GitHub API and sets commit name + `id+login@users.noreply.github.com`).
-5. **Clone / sync**, enable **Commit & push after approve** if you want merges on `origin`.
+4. In blank-cloud **Repository**: paste the PAT → **Connect GitHub**, pick a repo, optional **Commit & push after approve**.
 
 Commits appear under the bot profile when author email matches GitHub’s noreply address for that account.
 
@@ -183,7 +181,11 @@ curl -s -X PATCH http://localhost:8787/settings \
 | `GET` | `/health` | Liveness and workspace path |
 | `GET` | `/repo` | Workspace mode, git status, configured remote |
 | `PATCH` | `/repo` | Save remote URL, branch, token, push-on-approve |
-| `POST` | `/repo/github/link` | Verify PAT and set bot commit identity |
+| `GET` | `/repo/github/repos` | List GitHub repos for connected token (`?q=` search) |
+| `POST` | `/repo/github/select` | Pick `fullName`, clone/sync workspace |
+| `POST` | `/repo/github/link` | Connect token + return user and repo list |
+| `POST` | `/repo/github/device/start` | Start GitHub device OAuth (needs `GITHUB_OAUTH_CLIENT_ID`) |
+| `POST` | `/repo/github/device/poll` | Poll device flow for access token |
 | `POST` | `/repo/sync` | Clone or pull into the active workspace |
 | `POST` | `/repo/push` | Commit all changes and push (manual) |
 | `GET` | `/settings` | Active provider/model and which providers have keys configured |
