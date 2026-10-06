@@ -171,6 +171,10 @@ textarea {
   color: var(--success, #6bcf7f);
 }
 
+#repo-github-link a {
+  color: var(--accent, #7eb8ff);
+}
+
 .workspace-path {
   font-family: var(--mono);
   font-size: 11px;
@@ -308,6 +312,10 @@ textarea {
 }
 
 .nim-help a {
+  color: var(--accent, #7eb8ff);
+}
+
+#repo-github-link a {
   color: var(--accent, #7eb8ff);
 }
 

@@ -58,6 +58,11 @@ export interface RepoSettings {
   gitToken: string;
   /** After approve, commit applied files and push to origin. */
   pushOnApprove: boolean;
+  /** Git commit author (bot identity on GitHub). */
+  gitAuthorName: string;
+  gitAuthorEmail: string;
+  /** Set when token is verified against api.github.com/user */
+  githubLogin: string;
 }
 
 export interface AppSettings {
@@ -114,6 +119,9 @@ function repoFromEnv(): RepoSettings {
       process.env.BLANK_CLOUD_GIT_TOKEN?.trim() ||
       "",
     pushOnApprove: process.env.BLANK_CLOUD_PUSH_ON_APPROVE === "1",
+    gitAuthorName: process.env.BLANK_CLOUD_GIT_AUTHOR_NAME?.trim() || "blank-cloud agent",
+    gitAuthorEmail: process.env.BLANK_CLOUD_GIT_AUTHOR_EMAIL?.trim() || "",
+    githubLogin: process.env.BLANK_CLOUD_GITHUB_LOGIN?.trim() || "",
   };
 }
 
@@ -255,6 +263,9 @@ export function maskedRepo(settings: AppSettings): Omit<RepoSettings, "gitToken"
     remoteUrl: settings.repo.remoteUrl,
     branch: settings.repo.branch,
     pushOnApprove: settings.repo.pushOnApprove,
+    gitAuthorName: settings.repo.gitAuthorName,
+    gitAuthorEmail: settings.repo.gitAuthorEmail,
+    githubLogin: settings.repo.githubLogin,
     gitToken: maskSecret(settings.repo.gitToken),
   };
 }
