@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "logos": "bash scripts/generate-logos.sh",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts"
   },
