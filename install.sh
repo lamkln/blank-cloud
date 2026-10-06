@@ -25,18 +25,48 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 mkdir -p "$(dirname "$INSTALL_DIR")"
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
-  echo "Updating ${INSTALL_DIR} ..."
-  git -C "$INSTALL_DIR" fetch origin "$REF"
-  git -C "$INSTALL_DIR" checkout "$REF" 2>/dev/null || git -C "$INSTALL_DIR" checkout "origin/${REF}"
-  git -C "$INSTALL_DIR" pull --ff-only origin "$REF" 2>/dev/null || true
-else
+
+install_or_update_repo() {
+  if [[ -d "${INSTALL_DIR}/.git" ]]; then
+    echo "Updating ${INSTALL_DIR} ..."
+    git -C "$INSTALL_DIR" fetch origin "$REF"
+    git -C "$INSTALL_DIR" checkout "$REF" 2>/dev/null || git -C "$INSTALL_DIR" checkout "origin/${REF}"
+    git -C "$INSTALL_DIR" pull --ff-only origin "$REF" 2>/dev/null || true
+    return
+  fi
+
+  if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
+    echo "Using existing blank-cloud at ${INSTALL_DIR} (docker-compose.yml found)."
+    if [[ ! -d "${INSTALL_DIR}/.git" ]]; then
+      echo "  Tip: add git metadata with: git -C \"${INSTALL_DIR}\" init && git remote add origin \"${REPO_URL}\" && git fetch --depth 1 origin \"${REF}\" && git -C \"${INSTALL_DIR}\" checkout -f FETCH_HEAD"
+    fi
+    return
+  fi
+
+  if [[ -d "$INSTALL_DIR" ]] && [[ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
+    echo "error: ${INSTALL_DIR} already exists and is not empty (and is not a blank-cloud checkout)." >&2
+    echo "" >&2
+    echo "If this folder IS your install, add the app files then re-run:" >&2
+    echo "  cd ${INSTALL_DIR} && git clone --depth 1 --branch ${REF} ${REPO_URL} ." >&2
+    echo "" >&2
+    echo "Or pick another path:" >&2
+    echo "  BLANK_CLOUD_INSTALL_DIR=\${HOME}/blank-cloud-new bash install.sh" >&2
+    echo "" >&2
+    echo "Or remove the old folder (only if you do not need its contents):" >&2
+    echo "  rm -rf ${INSTALL_DIR}" >&2
+    exit 1
+  fi
+
   echo "Cloning blank-cloud into ${INSTALL_DIR} ..."
+  mkdir -p "$INSTALL_DIR"
   git clone --depth 1 --branch "$REF" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
+    rm -rf "$INSTALL_DIR"
     git clone "$REPO_URL" "$INSTALL_DIR"
     git -C "$INSTALL_DIR" checkout "$REF"
   }
-fi
+}
+
+install_or_update_repo
 
 mkdir -p "$PROJECT_DIR"
 
