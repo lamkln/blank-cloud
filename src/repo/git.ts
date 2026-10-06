@@ -52,16 +52,50 @@ export function authedCloneUrl(remoteUrl: string, token: string): string {
   return url;
 }
 
+export function sanitizeGitSecrets(text: string): string {
+  return text
+    .replace(/x-access-token:[^@\s'"]+@/gi, "x-access-token:***@")
+    .replace(/\bghp_[A-Za-z0-9]{20,}\b/g, "ghp_***")
+    .replace(/\bgithub_pat_[A-Za-z0-9_]+\b/g, "github_pat_***")
+    .replace(/\bgho_[A-Za-z0-9]+\b/g, "gho_***");
+}
+
+function friendlyGitHubCloneError(sanitized: string): string | null {
+  const lower = sanitized.toLowerCase();
+  if (
+    lower.includes("repository not found") ||
+    lower.includes("could not read from remote repository")
+  ) {
+    return (
+      'GitHub returned "repository not found". Verify the repo exists and your account can open it on github.com. ' +
+      "Then reconnect: Sign in with GitHub (OAuth) or paste a PAT with access to that repo (classic: repo scope; fine-grained: Contents read on the repo). " +
+      "If a token appeared in an error message, revoke it on GitHub and connect again."
+    );
+  }
+  return null;
+}
+
+function rethrowGitError(err: unknown): never {
+  const raw = err instanceof Error ? err.message : String(err);
+  const sanitized = sanitizeGitSecrets(raw);
+  const friendly = friendlyGitHubCloneError(sanitized);
+  throw new Error(friendly ?? sanitized);
+}
+
 async function runGit(
   cwd: string,
   args: string[],
 ): Promise<{ stdout: string; stderr: string }> {
-  const { stdout, stderr } = await execFileAsync("git", args, {
-    cwd,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return { stdout: stdout.toString(), stderr: stderr.toString() };
+  try {
+    const { stdout, stderr } = await execFileAsync("git", args, {
+      cwd,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return { stdout: stdout.toString(), stderr: stderr.toString() };
+  } catch (err) {
+    rethrowGitError(err);
+  }
 }
 
 function isEmptyDir(dir: string): boolean {
@@ -100,18 +134,43 @@ export async function syncRepository(
   }
 
   const cloneUrl = authedCloneUrl(remoteUrl, repo.gitToken);
-  await runGit(process.cwd(), [
-    "clone",
-    "--depth",
-    "1",
-    "--branch",
-    branch,
-    cloneUrl,
-    workspaceRoot,
-  ]);
+  if (!repo.gitToken.trim() && remoteUrl.includes("github.com")) {
+    throw new Error(
+      "GitHub clone requires a token. Sign in with GitHub or paste a PAT with repo access, then select the repository again.",
+    );
+  }
+  await shallowCloneWithBranch(process.cwd(), cloneUrl, workspaceRoot, branch);
   await runGit(workspaceRoot, ["remote", "set-url", "origin", remoteUrl]);
   await applyGitIdentity(workspaceRoot, repo);
   return { action: "clone", branch };
+}
+
+async function shallowCloneWithBranch(
+  cwd: string,
+  cloneUrl: string,
+  workspaceRoot: string,
+  branch: string,
+): Promise<void> {
+  try {
+    await runGit(cwd, [
+      "clone",
+      "--depth",
+      "1",
+      "--branch",
+      branch,
+      cloneUrl,
+      workspaceRoot,
+    ]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/remote branch .* not found|could not find remote branch/i.test(msg)) {
+      throw err;
+    }
+    await runGit(cwd, ["clone", "--depth", "1", cloneUrl, workspaceRoot]);
+    await runGit(workspaceRoot, ["checkout", branch]).catch(async () => {
+      await runGit(workspaceRoot, ["checkout", "-B", branch, `origin/${branch}`]);
+    });
+  }
 }
 
 export async function getGitStatus(workspaceRoot: string): Promise<GitStatus> {
@@ -170,7 +229,7 @@ export async function getGitStatus(workspaceRoot: string): Promise<GitStatus> {
 }
 
 function sanitizeRemoteForDisplay(url: string): string {
-  return url.replace(/x-access-token:[^@]+@/i, "x-access-token:***@");
+  return sanitizeGitSecrets(url.replace(/x-access-token:[^@]+@/i, "x-access-token:***@"));
 }
 
 export async function applyGitIdentity(workspaceRoot: string, repo: RepoSettings): Promise<void> {
