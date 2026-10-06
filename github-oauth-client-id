@@ -1,2 +1,2 @@
-# Official blank-agents OAuth App — paste Client ID on the next line (public, not a secret).
-# Enable Device Flow on the GitHub OAuth app. No .env required for end users.
+# Official blank-agents OAuth App (device flow). Client ID is public — not a secret.
+Ov23liPVYZPPbjjzwsmY
