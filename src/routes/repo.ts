@@ -151,7 +151,15 @@ repo.patch("/", async (c) => {
 repo.get("/github/repos", async (c) => {
   const token = activeRepoSettings().gitToken.trim();
   if (!token) {
-    return c.json({ error: "Sign in with GitHub first", signInUrl: "/auth/github/login" }, 401);
+    return c.json(
+      {
+        error: "Sign in with GitHub first",
+        ...(isGitHubOAuthConfigured()
+          ? { signInUrl: "/auth/github/login" }
+          : { useConnectGitHub: true }),
+      },
+      401,
+    );
   }
   const q = c.req.query("q") ?? "";
   const page = Number(c.req.query("page") ?? "1") || 1;
@@ -179,7 +187,15 @@ repo.post("/github/select", async (c) => {
   const settings = loadAppSettings();
   const token = activeRepoSettings().gitToken.trim();
   if (!token) {
-    return c.json({ error: "Sign in with GitHub first", signInUrl: "/auth/github/login" }, 401);
+    return c.json(
+      {
+        error: "Sign in with GitHub first",
+        ...(isGitHubOAuthConfigured()
+          ? { signInUrl: "/auth/github/login" }
+          : { useConnectGitHub: true }),
+      },
+      401,
+    );
   }
 
   const fullName = parsed.data.fullName.trim();
