@@ -625,10 +625,18 @@ async function selectGitHubRepo(fullName) {
 }
 
 async function startGitHubDeviceSignIn() {
+  const panel = $("github-device-panel");
+  const codeEl = $("github-device-code");
+  const openEl = $("github-device-open");
   try {
     const start = await api("/repo/github/device/start", { method: "POST", body: "{}" });
-    addSystemNote(`Open ${start.verification_uri} and enter code ${start.user_code}`);
-    window.open(start.verification_uri, "_blank", "noopener");
+    const code = start.user_code || "????";
+    const uri = start.verification_uri || "https://github.com/login/device";
+    panel.hidden = false;
+    codeEl.textContent = code;
+    openEl.href = uri;
+    addSystemNote(`GitHub code: ${code} — use Open GitHub in the sidebar or ${uri}`);
+    window.open(uri, "_blank", "noopener");
     const intervalMs = (start.interval || 5) * 1000;
     let pending = true;
     while (pending) {
@@ -640,6 +648,7 @@ async function startGitHubDeviceSignIn() {
       if (poll.status === "pending" || poll.status === "slow_down") continue;
       if (poll.status === "ok") {
         pending = false;
+        panel.hidden = true;
         $("repo-picker").hidden = false;
         renderRepoList(poll.repos, null);
         await loadRepo();
@@ -648,6 +657,7 @@ async function startGitHubDeviceSignIn() {
       }
     }
   } catch (e) {
+    panel.hidden = true;
     addSystemNote(e.message);
   }
 }
@@ -813,6 +823,16 @@ $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
 $("test-settings").addEventListener("click", () => void testSettingsConnection());
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
+$("github-device-copy").addEventListener("click", async () => {
+  const code = $("github-device-code").textContent?.trim();
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code);
+    addSystemNote("Code copied — paste it on GitHub.");
+  } catch {
+    addSystemNote(`Your code: ${code}`);
+  }
+});
 $("repo-connect-github").addEventListener("click", () => void connectGitHub());
 $("repo-logout").addEventListener("click", () => void logoutGitHub());
 $("repo-search").addEventListener("input", () => {
