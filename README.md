@@ -50,6 +50,8 @@ docker compose up --build
 
 The agent listens on **http://localhost:8787**. Your project is mounted at `/workspace` inside the container.
 
+Open **http://localhost:8787/** in a browser for the **Web UI** (task prompt, live log stream, approve/undo proposals, provider settings). The JSON API remains available at the same port (`/health`, `/settings`, `/tasks`, …).
+
 ## docker-compose.yml
 
 ```yaml
@@ -120,6 +122,7 @@ curl -s -X PATCH http://localhost:8787/settings \
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/` | Web UI |
 | `GET` | `/health` | Liveness and workspace path |
 | `GET` | `/settings` | Active provider/model and which providers have keys configured |
 | `PATCH` | `/settings` | Change `provider`, `model`, or `customBaseUrl` |
