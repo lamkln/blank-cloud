@@ -3,7 +3,13 @@
 Self-hosted AI coding agent in a single Docker container: chat API, repository tools, and a command runner. No Cursor and no third-party agent cloud — your code and API keys stay on the Linux host.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/HEAD/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/install.sh | bash
+```
+
+If that URL fails, use the GitHub redirect (same file):
+
+```bash
+curl -fsSL https://github.com/lamkln/blank-cloud/raw/main/install.sh | bash
 ```
 
 Requires **git**, **Docker**, and **Docker Compose v2** on Linux. The script clones to `~/blank-cloud`, creates `.env`, and builds the `blank-cloud` image. Set an API key in `~/blank-cloud/.env`, then run `cd ~/blank-cloud && docker compose up -d`.
