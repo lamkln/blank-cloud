@@ -10,6 +10,8 @@ Requires **git**, **Docker**, and **Docker Compose v2** on Linux.
 git clone --depth 1 https://github.com/lamkln/blank-cloud.git ~/blank-cloud && bash ~/blank-cloud/install.sh
 ```
 
+If `~/blank-cloud` already exists, either run from that folder (`bash install.sh` after `git pull`), or use another install path: `BLANK_CLOUD_INSTALL_DIR=~/blank-cloud-new bash ~/blank-cloud/install.sh`.
+
 ### Install (curl)
 
 Use the **`/raw/main/`** URL. This is wrong and returns **404**:
