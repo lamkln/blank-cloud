@@ -72,6 +72,8 @@ export interface TaskRecord {
   undoStack: UndoSnapshot[];
   lastError: string | null;
   iteration: number;
+  /** GitHub login when per-user OAuth is enabled */
+  ownerLogin: string | null;
 }
 
 export interface CreateTaskInput {

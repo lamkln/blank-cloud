@@ -44,46 +44,67 @@ blank-cloud edits a **real git workspace**, not just chat. Two ways to attach a 
 
 ### 1. Web UI — connect GitHub & pick a repo (Cursor-style)
 
-In the sidebar **Repository** section:
+In the sidebar **Repository** section you attach the git tree the agent edits.
 
-1. Create a [GitHub personal access token](https://github.com/settings/tokens) with access to your repositories (fine-grained: **Contents** read/write on selected repos; or classic `repo` scope).
-2. Paste the token → **Connect GitHub** (lists your repos via the GitHub API).
-3. **Search** and **click a repository** — blank-cloud sets branch/URL, clones to `./data/workspace`, and marks the workspace **Ready**.
-4. Optional: **Advanced** → enable **Commit & push after approve**.
+#### Per-user GitHub (recommended for a shared NAS)
 
-Optional **Sign in (device)** appears when the server has `GITHUB_OAUTH_CLIENT_ID` set (OAuth app with device flow enabled).
+When the server is configured for **GitHub OAuth**, **each person signs in with their own GitHub account** (like Cursor): their token, repo list, clone, and agent runs are kept separate under `./data/users/` and `./data/workspaces/<login>/`.
 
-Env bootstrap (optional):
+1. Register a [GitHub OAuth App](https://github.com/settings/developers) (type: **Web application**).
+   - **Authorization callback URL:** `{BLANK_CLOUD_PUBLIC_URL}/auth/github/callback`  
+     Example: `http://192.168.1.50:8787/auth/github/callback`
+2. Set env on the host (or in `~/blank-cloud/.env`):
+
+```bash
+GITHUB_OAUTH_CLIENT_ID=Ov23li...
+GITHUB_OAUTH_CLIENT_SECRET=...
+BLANK_CLOUD_PUBLIC_URL=http://YOUR_NAS_IP:8787   # must match how users open the UI
+SESSION_SECRET=long-random-string                # signs login cookies
+```
+
+3. Restart: `docker compose up --build -d`
+4. In the UI: **Sign in with GitHub** → search and **click a repository** → workspace shows **Ready**.
+5. Optional: **Advanced** → **Commit & push after approve** (stored per user when OAuth is on).
+
+**Shared commit brand** (display name on commits, e.g. `blank-cloud agent`) stays **global** in the sidebar — same idea as [@cursoragent](https://github.com/cursoragent); pushes still use **your** GitHub token and repos you can access.
+
+#### Single-user / legacy (no OAuth env)
+
+If OAuth env vars are **not** set, the server uses one shared PAT in settings (fine for one person):
+
+1. Create a [GitHub personal access token](https://github.com/settings/tokens) with access to your repositories (fine-grained: **Contents** read/write; or classic `repo` scope).
+2. Paste the token → **Connect (PAT)** (lists repos via the GitHub API).
+3. **Search** and **click a repository** — blank-cloud clones to `./data/workspace` and marks the workspace **Ready**.
+
+Optional **Sign in (device)** still appears if only `GITHUB_OAUTH_CLIENT_ID` is set without a client secret (device flow path).
+
+Env bootstrap (optional, legacy):
 
 ```bash
 GITHUB_TOKEN=ghp_...
-GITHUB_OAUTH_CLIENT_ID=Iv1.xxxx   # optional device sign-in
 BLANK_CLOUD_PUSH_ON_APPROVE=1
 ```
 
-When a repository is selected, the agent uses **`./data/workspace`** instead of the `BLANK_CLOUD_PROJECT` mount.
+When a repository is selected (legacy mode), the agent uses **`./data/workspace`** instead of the `BLANK_CLOUD_PROJECT` mount. With OAuth, each signed-in user uses **`./data/workspaces/<github-login>/`**.
 
 ### Shared brand (like @cursoragent)
 
-Cursor shows a **public bot identity** on commits; each user still connects **their** GitHub for repo access. On self-hosted blank-cloud you get the same **look** with one bot account:
-
-| Piece | What you set up |
-|--------|------------------|
-| **Public brand** | GitHub user `@your-blank-cloud-bot`, display name **blank-cloud agent**, public profile |
-| **Commit author** | Sidebar **Shared brand — commits show as** (default `blank-cloud agent`) + bot noreply email after **Connect** |
-| **Repo access** | Bot invited as **Write** collaborator; PAT on **bot** account (`repo` scope) |
-| **Everyone’s repos** | Not automatic — each owner must invite the bot (or use a future GitHub App) |
+| Piece | OAuth (multi-user) | Legacy PAT |
+|--------|-------------------|------------|
+| **Repo access** | Each user’s GitHub after **Sign in** | One PAT in the sidebar |
+| **Commit author** | Global **Shared brand — commits show as** (default `blank-cloud agent`) | Same |
+| **Workspace** | `./data/workspaces/<login>/` | `./data/workspace` |
 
 Set `BLANK_CLOUD_GIT_AUTHOR_NAME` if you want a different brand string in env.
 
-### GitHub bot account (like Cursor Agent)
+### Optional: one bot PAT instead of per-user OAuth
 
-GitHub shows **who pushed** and **commit author** separately. For a dedicated bot identity:
+If you prefer one shared bot account (every repo owner invites the bot):
 
 1. **Create a GitHub account** for the bot (e.g. `your-blank-cloud-bot`) — same idea as [@cursoragent](https://github.com/cursoragent).
 2. **Add the bot to your repo**: Settings → Collaborators (or org team with write access).
-3. **Create a PAT** on the **bot account** (fine-grained: Contents read/write on that repo; or classic `repo` scope).
-4. In blank-cloud **Repository**: paste the PAT → **Connect GitHub**, pick a repo, optional **Commit & push after approve**.
+3. **Create a PAT** on the **bot account** (fine-grained: Contents read/write; or classic `repo` scope).
+4. Leave OAuth env **unset**, paste the PAT → **Connect (PAT)**, pick a repo.
 
 Commits appear under the bot profile when author email matches GitHub’s noreply address for that account.
 
@@ -192,6 +213,10 @@ curl -s -X PATCH http://localhost:8787/settings \
 |--------|------|-------------|
 | `GET` | `/` | Web UI |
 | `GET` | `/health` | Liveness and workspace path |
+| `GET` | `/auth/me` | OAuth enabled, signed-in user, per-user repo snapshot |
+| `GET` | `/auth/github/login` | Redirect to GitHub OAuth (needs client id + secret) |
+| `GET` | `/auth/github/callback` | OAuth callback (sets session cookie) |
+| `POST` | `/auth/logout` | Clear session |
 | `GET` | `/repo` | Workspace mode, git status, configured remote |
 | `PATCH` | `/repo` | Save remote URL, branch, token, push-on-approve |
 | `GET` | `/repo/github/repos` | List GitHub repos for connected token (`?q=` search) |

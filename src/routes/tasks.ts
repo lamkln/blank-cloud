@@ -20,12 +20,29 @@ import {
   subscribe,
   updateTask,
 } from "../tasks/store.js";
-import { loadAppSettings, usesRemoteRepo } from "../settings/store.js";
+import { getRequestUser } from "../context/request.js";
+import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
+import { isGitHubOAuthConfigured } from "../auth/github-oauth.js";
+
+import { updateUser } from "../auth/users.js";
 
 const tasks = new Hono();
 
+function currentOwner(): string | null {
+  return getRequestUser()?.login ?? null;
+}
+
+function canAccessTask(
+  task: ReturnType<typeof getTask>,
+): task is NonNullable<ReturnType<typeof getTask>> {
+  if (!task) return false;
+  const owner = currentOwner();
+  if (owner && task.ownerLogin && task.ownerLogin !== owner) return false;
+  return true;
+}
+
 tasks.get("/", (c) => {
-  const items = listTasks().map((t) => ({
+  const items = listTasks(40, currentOwner()).map((t) => ({
     id: t.id,
     title: t.title,
     status: t.status,
@@ -47,20 +64,20 @@ tasks.post("/", async (c) => {
     return c.json({ error: "prompt is required" }, 400);
   }
 
-  const settings = loadAppSettings();
   const root = getWorkspaceRoot();
-  if (!isWorkspaceReady(root, usesRemoteRepo(settings))) {
+  if (!isWorkspaceReady(root, usesActiveRemoteRepo())) {
     return c.json(
       {
-        error: usesRemoteRepo(settings)
-          ? "Repository not cloned yet. Open Repository in the sidebar, save the remote URL, and click Clone / sync."
-          : "Workspace is not ready. Mount a project directory or connect a git remote in the Web UI.",
+        error: usesActiveRemoteRepo()
+          ? "Select a GitHub repository first (sidebar)."
+          : "Workspace is not ready. Sign in and select a repo, or configure a mount.",
+        signInUrl: isGitHubOAuthConfigured() ? "/auth/github/login" : undefined,
       },
       400,
     );
   }
 
-  const task = createTask(prompt);
+  const task = createTask(prompt, currentOwner());
   queueMicrotask(() => {
     void runAgentTurn(task.id);
   });
@@ -77,7 +94,7 @@ tasks.post("/", async (c) => {
 
 tasks.get("/:id/events", (c) => {
   const task = getTask(c.req.param("id"));
-  if (!task) {
+  if (!canAccessTask(task)) {
     return c.json({ error: "Task not found" }, 404);
   }
   return c.json({ events: listTaskEvents(task.id) });
@@ -85,7 +102,7 @@ tasks.get("/:id/events", (c) => {
 
 tasks.get("/:id", (c) => {
   const task = getTask(c.req.param("id"));
-  if (!task) {
+  if (!canAccessTask(task)) {
     return c.json({ error: "Task not found" }, 404);
   }
   return c.json(taskToJson(task));
@@ -93,7 +110,7 @@ tasks.get("/:id", (c) => {
 
 tasks.post("/:id/message", async (c) => {
   const task = getTask(c.req.param("id"));
-  if (!task) {
+  if (!canAccessTask(task)) {
     return c.json({ error: "Task not found" }, 404);
   }
   if (task.status === "running" || task.status === "executing") {
@@ -124,7 +141,7 @@ tasks.post("/:id/message", async (c) => {
 
 tasks.post("/:id/reject", async (c) => {
   const task = getTask(c.req.param("id"));
-  if (!task) {
+  if (!canAccessTask(task)) {
     return c.json({ error: "Task not found" }, 404);
   }
   if (!task.pendingProposal) {
@@ -152,7 +169,7 @@ tasks.post("/:id/reject", async (c) => {
 
 tasks.post("/:id/approve", async (c) => {
   const task = getTask(c.req.param("id"));
-  if (!task) {
+  if (!canAccessTask(task)) {
     return c.json({ error: "Task not found" }, 404);
   }
   if (!task.pendingProposal) {
@@ -172,13 +189,13 @@ tasks.post("/:id/approve", async (c) => {
   const taskId = task.id;
 
   async function maybePushAfterApply(): Promise<void> {
-    const settings = loadAppSettings();
-    if (!settings.repo.pushOnApprove || !usesRemoteRepo(settings)) return;
+    const repoSettings = activeRepoSettings();
+    if (!repoSettings.pushOnApprove || !usesActiveRemoteRepo()) return;
     try {
       const paths = proposal.files.map((f) => f.path);
       const pushResult = await commitAndPush(
         getWorkspaceRoot(),
-        settings.repo,
+        repoSettings,
         `blank-cloud: ${proposal.summary}`.slice(0, 200),
         paths,
       );
@@ -242,7 +259,7 @@ tasks.post("/:id/approve", async (c) => {
 
 tasks.post("/:id/undo", (c) => {
   const task = getTask(c.req.param("id"));
-  if (!task) {
+  if (!canAccessTask(task)) {
     return c.json({ error: "Task not found" }, 404);
   }
   const undone = undoLastApply(task.id);
@@ -259,7 +276,7 @@ tasks.post("/:id/undo", (c) => {
 tasks.get("/:id/stream", (c) => {
   const taskId = c.req.param("id");
   const task = getTask(taskId);
-  if (!task) {
+  if (!canAccessTask(task)) {
     return c.json({ error: "Task not found" }, 404);
   }
 

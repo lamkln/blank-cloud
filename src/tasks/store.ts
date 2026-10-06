@@ -12,7 +12,7 @@ function titleFromPrompt(prompt: string): string {
   return line.length > 72 ? `${line.slice(0, 69)}…` : line;
 }
 
-export function createTask(prompt: string): TaskRecord {
+export function createTask(prompt: string, ownerLogin: string | null = null): TaskRecord {
   const now = new Date().toISOString();
   const userMessage: TaskMessage = {
     id: randomUUID(),
@@ -32,6 +32,7 @@ export function createTask(prompt: string): TaskRecord {
     undoStack: [],
     lastError: null,
     iteration: 0,
+    ownerLogin,
   };
   tasks.set(task.id, task);
   events.set(task.id, []);
@@ -41,8 +42,9 @@ export function createTask(prompt: string): TaskRecord {
   return task;
 }
 
-export function listTasks(limit = 40): TaskRecord[] {
+export function listTasks(limit = 40, ownerLogin: string | null = null): TaskRecord[] {
   return Array.from(tasks.values())
+    .filter((t) => ownerLogin == null || t.ownerLogin === ownerLogin)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, limit);
 }
