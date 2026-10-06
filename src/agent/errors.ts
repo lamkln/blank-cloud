@@ -1,3 +1,4 @@
+import { RetryError } from "ai";
 import type { LlmProvider } from "../config.js";
 import { getRuntimeSettings } from "../config.js";
 
@@ -39,6 +40,18 @@ export function formatAgentError(
   err: unknown,
   context?: { provider?: LlmProvider },
 ): string {
+  if (RetryError.isInstance(err)) {
+    const inner = err.lastError ?? err.errors[err.errors.length - 1];
+    const formatted = formatAgentError(inner, context);
+    if (/internal server error/i.test(formatted)) {
+      return (
+        `${formatted} Check Settings → provider, model, and Test connection. ` +
+        "Some endpoints reject streaming with tools; blank-cloud retries in standard mode when that happens."
+      );
+    }
+    return formatted;
+  }
+
   if (!err || typeof err !== "object") {
     return String(err);
   }
@@ -95,6 +108,24 @@ export function formatAgentError(
 
   if (/provider.*not configured/i.test(detail)) {
     return detail;
+  }
+
+  if (statusCode === 429 || /rate limit/i.test(detail)) {
+    return `Rate limited — wait a moment or switch model/provider. (${detail})`;
+  }
+
+  if (statusCode === 500 || statusCode === 502 || statusCode === 503) {
+    return (
+      `LLM provider error (HTTP ${statusCode}): ${detail}. ` +
+      "Verify your API key, model name, and base URL in Settings, then use Test connection."
+    );
+  }
+
+  if (/internal server error/i.test(detail)) {
+    return (
+      `LLM provider error: ${detail}. ` +
+      "Verify your API key, model name, and base URL in Settings, then use Test connection."
+    );
   }
 
   return statusCode ? `LLM request failed (HTTP ${statusCode}): ${detail}` : detail;
