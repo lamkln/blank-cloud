@@ -1,5 +1,16 @@
 node_modules
 dist
 .git
+
+# Host runtime state — often root-owned / mode 700 from the container
+data
+project
+
+.env
+.env.*
+!.env.example
+
 *.md
 !README.md
+
+docker-compose.override.yml
