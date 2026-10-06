@@ -10,6 +10,54 @@ export function isGitHubOAuthConfigured(): boolean {
   );
 }
 
+export function getGitHubOAuthClientId(): string {
+  return process.env.GITHUB_OAUTH_CLIENT_ID?.trim() || "";
+}
+
+export interface GitHubConnectSetup {
+  webOAuthReady: boolean;
+  deviceFlowReady: boolean;
+  oneClickReady: boolean;
+  missingForWebOAuth: string[];
+  suggestedCallbackUrl: string | null;
+  envExampleLines: string[];
+}
+
+export function getGitHubConnectSetup(c?: {
+  req: { url: string; header: (n: string) => string | undefined };
+}): GitHubConnectSetup {
+  const clientId = getGitHubOAuthClientId();
+  const clientSecret = getGitHubOAuthClientSecret();
+  const publicUrl = process.env.BLANK_CLOUD_PUBLIC_URL?.trim() || "";
+  const missingForWebOAuth: string[] = [];
+  if (!clientId) missingForWebOAuth.push("GITHUB_OAUTH_CLIENT_ID");
+  if (!clientSecret) missingForWebOAuth.push("GITHUB_OAUTH_CLIENT_SECRET");
+  if (!publicUrl) missingForWebOAuth.push("BLANK_CLOUD_PUBLIC_URL");
+
+  const suggestedCallbackUrl = c
+    ? githubOAuthRedirectUri(c)
+    : publicUrl
+      ? `${publicUrl.replace(/\/$/, "")}/auth/github/callback`
+      : null;
+
+  const hostHint = c ? getPublicBaseUrl(c) : publicUrl || "http://YOUR_NAS_IP:8787";
+  const envExampleLines = [
+    `GITHUB_OAUTH_CLIENT_ID=Ov23li...`,
+    `GITHUB_OAUTH_CLIENT_SECRET=...`,
+    `BLANK_CLOUD_PUBLIC_URL=${hostHint.replace(/\/$/, "")}`,
+    `SESSION_SECRET=...   # long random string (install.sh generates this)`,
+  ];
+
+  return {
+    webOAuthReady: missingForWebOAuth.length === 0,
+    deviceFlowReady: Boolean(clientId),
+    oneClickReady: Boolean(clientId),
+    missingForWebOAuth,
+    suggestedCallbackUrl,
+    envExampleLines,
+  };
+}
+
 export function getPublicBaseUrl(c: { req: { url: string; header: (n: string) => string | undefined } }): string {
   const env = process.env.BLANK_CLOUD_PUBLIC_URL?.trim();
   if (env) return env.replace(/\/$/, "");

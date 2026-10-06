@@ -3,6 +3,7 @@ import {
   buildGitHubAuthorizeUrl,
   exchangeGitHubCode,
   fetchGitHubUserWithToken,
+  getGitHubConnectSetup,
   githubOAuthRedirectUri,
   isGitHubOAuthConfigured,
 } from "../auth/github-oauth.js";
@@ -20,6 +21,21 @@ import { updateAppSettings } from "../settings/store.js";
 const auth = new Hono();
 
 auth.get("/me", (c) => c.json(authStatus(c)));
+
+auth.get("/setup", (c) => {
+  const setup = getGitHubConnectSetup(c);
+  return c.json({
+    ...setup,
+    steps: [
+      "Create a GitHub OAuth App: https://github.com/settings/developers → OAuth Apps → New",
+      "Application name: blank-cloud (any name)",
+      `Homepage URL: ${setup.envExampleLines[2]?.replace("BLANK_CLOUD_PUBLIC_URL=", "") ?? "your NAS URL"}`,
+      `Authorization callback URL: ${setup.suggestedCallbackUrl ?? "(set BLANK_CLOUD_PUBLIC_URL first)"}`,
+      "Copy Client ID and generate a Client secret",
+      `Add to ~/blank-cloud/.env (see envExampleLines), then: docker compose up --build -d`,
+    ],
+  });
+});
 
 auth.get("/github/login", (c) => {
   if (!isGitHubOAuthConfigured()) {
