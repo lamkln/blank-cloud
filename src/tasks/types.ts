@@ -37,6 +37,7 @@ export interface TaskMessage {
 
 export type TaskEventType =
   | "message"
+  | "message_delta"
   | "log"
   | "tool"
   | "proposal"

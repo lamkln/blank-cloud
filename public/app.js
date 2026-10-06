@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 
 const EVENT_TYPES = [
   "message",
+  "message_delta",
   "log",
   "tool",
   "proposal",
@@ -35,7 +36,10 @@ const state = {
   pollTimer: null,
   seenEventIds: new Set(),
   terminalBody: null,
+  activeStream: null,
 };
+
+const md = () => window.blankCloudMarkdown;
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -108,12 +112,46 @@ function scrollThread() {
   el.scrollTop = el.scrollHeight;
 }
 
+function setTurnBody(bodyEl, text, streaming) {
+  bodyEl.classList.add("md-body");
+  const render = md()?.renderMarkdown;
+  if (render) {
+    bodyEl.innerHTML = render(text, streaming);
+  } else {
+    bodyEl.textContent = text;
+  }
+}
+
+function clearActiveStream() {
+  state.activeStream = null;
+}
+
+function upsertStreamingTurn(role, streamId, text) {
+  $("empty-state").hidden = true;
+  if (state.activeStream?.streamId === streamId && state.activeStream.wrap) {
+    setTurnBody(state.activeStream.body, text, true);
+    scrollThread();
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = `turn turn-${role}`;
+  wrap.innerHTML = `<div class="turn-label">${role === "user" ? "You" : "Agent"}</div><div class="turn-body"></div>`;
+  const body = wrap.querySelector(".turn-body");
+  body.dataset.streamId = streamId;
+  setTurnBody(body, text, true);
+  $("chat-thread").appendChild(wrap);
+  state.activeStream = { streamId, wrap, body, role };
+  scrollThread();
+}
+
 function addTurn(role, text) {
+  clearActiveStream();
   $("empty-state").hidden = true;
   const wrap = document.createElement("div");
   wrap.className = `turn turn-${role}`;
   wrap.innerHTML = `<div class="turn-label">${role === "user" ? "You" : "Agent"}</div><div class="turn-body"></div>`;
-  wrap.querySelector(".turn-body").textContent = text;
+  const body = wrap.querySelector(".turn-body");
+  setTurnBody(body, text, false);
   $("chat-thread").appendChild(wrap);
   scrollThread();
 }
@@ -165,6 +203,7 @@ function clearChat() {
   $("chat-thread").appendChild(empty);
   state.terminalBody = null;
   state.seenEventIds.clear();
+  clearActiveStream();
 }
 
 function ingestEvent(ev) {
@@ -175,8 +214,30 @@ function ingestEvent(ev) {
   const msg = ev.message ?? "";
   const role = ev.data?.role;
 
+  if (type === "message_delta") {
+    const streamId = ev.data?.streamId;
+    if (!streamId) return;
+    upsertStreamingTurn(role === "user" ? "user" : "agent", streamId, msg);
+    return;
+  }
   if (type === "message") {
-    addTurn(role === "user" ? "user" : "agent", msg);
+    const roleKey = role === "user" ? "user" : "agent";
+    if (
+      state.activeStream &&
+      roleKey === "agent" &&
+      ev.data?.streamId &&
+      state.activeStream.streamId === ev.data.streamId
+    ) {
+      setTurnBody(state.activeStream.body, msg, false);
+      clearActiveStream();
+      return;
+    }
+    if (state.activeStream && roleKey === "agent") {
+      setTurnBody(state.activeStream.body, msg, false);
+      clearActiveStream();
+      return;
+    }
+    addTurn(roleKey, msg);
     return;
   }
   if (type === "log") {

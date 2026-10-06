@@ -1,4 +1,5 @@
-import { generateText, tool } from "ai";
+import { randomUUID } from "node:crypto";
+import { streamText, tool } from "ai";
 import { z } from "zod";
 import { createLanguageModel } from "../providers/model.js";
 import {
@@ -39,25 +40,43 @@ export async function runAgentTurn(taskId: string): Promise<void> {
   emit(taskId, "status", "Agent working…", { status: "running", iteration: task.iteration + 1 });
 
   try {
-    const result = await generateText({
+    let streamId = randomUUID();
+    let segmentText = "";
+
+    const result = streamText({
       model: createLanguageModel(),
       system: SYSTEM,
       messages: task.messages.map((m) => ({ role: m.role, content: m.content })),
       maxSteps: 16,
       tools: buildTools(taskId),
+      onChunk: ({ chunk }) => {
+        if (chunk.type !== "text-delta") {
+          return;
+        }
+        segmentText += chunk.textDelta;
+        emit(
+          taskId,
+          "message_delta",
+          segmentText,
+          { role: "assistant", streamId },
+          { persist: false },
+        );
+      },
+      onStepFinish: () => {
+        const trimmed = segmentText.trim();
+        if (trimmed) {
+          appendTaskMessage(taskId, "assistant", trimmed, true);
+        }
+        segmentText = "";
+        streamId = randomUUID();
+      },
     });
+
+    await result.text;
 
     const refreshed = getTask(taskId);
     if (refreshed?.pendingProposal) {
-      if (result.text?.trim()) {
-        appendTaskMessage(taskId, "assistant", result.text.trim(), true);
-      }
       return;
-    }
-
-    const assistantText = result.text?.trim();
-    if (assistantText) {
-      appendTaskMessage(taskId, "assistant", assistantText, true);
     }
 
     updateTask(taskId, { status: "completed" });

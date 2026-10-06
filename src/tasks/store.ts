@@ -105,6 +105,7 @@ export function emit(
   type: TaskEvent["type"],
   message: string,
   data?: Record<string, unknown>,
+  options?: { persist?: boolean },
 ): TaskEvent {
   const event: TaskEvent = {
     id: randomUUID(),
@@ -115,7 +116,7 @@ export function emit(
     createdAt: new Date().toISOString(),
   };
   const list = events.get(taskId);
-  if (list) {
+  if (list && options?.persist !== false) {
     list.push(event);
   }
   const set = listeners.get(taskId);

@@ -648,8 +648,89 @@ textarea {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text);
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.turn-body.md-body {
+  white-space: normal;
+}
+
+.turn-body.md-body p {
+  margin: 0 0 0.75em;
+}
+
+.turn-body.md-body p:last-child {
+  margin-bottom: 0;
+}
+
+.turn-body.md-body .md-heading {
+  margin: 0.6em 0 0.35em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.turn-body.md-body h1.md-heading {
+  font-size: 1.15em;
+}
+
+.turn-body.md-body h2.md-heading {
+  font-size: 1.05em;
+}
+
+.turn-body.md-body h3.md-heading {
+  font-size: 1em;
+  color: var(--text-secondary);
+}
+
+.turn-body.md-body .md-list {
+  margin: 0.35em 0 0.75em;
+  padding-left: 1.25em;
+}
+
+.turn-body.md-body .md-list li {
+  margin: 0.2em 0;
+}
+
+.turn-body.md-body .md-quote {
+  margin: 0.5em 0;
+  padding: 0.35em 0 0.35em 0.75em;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.turn-body.md-body .md-pre {
+  margin: 0.6em 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.turn-body.md-body .md-pre code {
+  white-space: pre;
+}
+
+.turn-body.md-body .md-inline {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.turn-body.md-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.turn-body.md-body a:hover {
+  text-decoration: underline;
 }
 
 .turn-user .turn-body {

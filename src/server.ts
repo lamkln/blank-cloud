@@ -44,7 +44,7 @@ app.get("/health", (c) =>
   c.json({
     ok: true,
     version: appVersion.version ?? "0.0.0",
-    ui: "minimal-connect-github",
+    ui: "realtime-markdown",
     workspace: getWorkspaceRoot(),
   }),
 );
