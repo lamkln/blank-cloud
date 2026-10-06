@@ -1,18 +1,20 @@
+import { hasGitHubConnectClientId } from "./github-client-id.js";
+import { isGitHubOAuthConfigured } from "./github-oauth.js";
+import { setSessionCookie } from "./session.js";
+import { updateUser } from "./users.js";
+import { githubNoreplyEmail, type GitHubUserPublic } from "../repo/github.js";
+
 import type { Context } from "hono";
-import { githubNoreplyEmail, getGitHubOAuthClientId, type GitHubUserPublic } from "../repo/github.js";
 import {
   DEFAULT_COMMIT_BRAND_NAME,
   loadAppSettings,
   resolveCommitBrand,
   updateAppSettings,
 } from "../settings/store.js";
-import { isGitHubOAuthConfigured } from "./github-oauth.js";
-import { setSessionCookie } from "./session.js";
-import { updateUser } from "./users.js";
 
-/** Web OAuth or device flow client id → per-user tokens and workspaces. */
+/** Device flow or web OAuth client id → per-user tokens and workspaces. */
 export function usePerUserGitHubStorage(): boolean {
-  return isGitHubOAuthConfigured() || Boolean(getGitHubOAuthClientId());
+  return isGitHubOAuthConfigured() || hasGitHubConnectClientId();
 }
 
 export function persistGitHubConnection(

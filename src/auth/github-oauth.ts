@@ -1,4 +1,8 @@
 import type { GitHubUserPublic } from "../repo/github.js";
+import {
+  hasGitHubConnectClientId,
+  resolveGitHubOAuthClientId,
+} from "./github-client-id.js";
 
 export function getGitHubOAuthClientSecret(): string {
   return process.env.GITHUB_OAUTH_CLIENT_SECRET?.trim() || "";
@@ -6,12 +10,12 @@ export function getGitHubOAuthClientSecret(): string {
 
 export function isGitHubOAuthConfigured(): boolean {
   return Boolean(
-    process.env.GITHUB_OAUTH_CLIENT_ID?.trim() && getGitHubOAuthClientSecret(),
+    resolveGitHubOAuthClientId() && getGitHubOAuthClientSecret(),
   );
 }
 
 export function getGitHubOAuthClientId(): string {
-  return process.env.GITHUB_OAUTH_CLIENT_ID?.trim() || "";
+  return resolveGitHubOAuthClientId();
 }
 
 export interface GitHubConnectSetup {
@@ -41,17 +45,20 @@ export function getGitHubConnectSetup(c?: {
       : null;
 
   const hostHint = c ? getPublicBaseUrl(c) : publicUrl || "http://YOUR_NAS_IP:8787";
-  const envExampleLines = [
-    `GITHUB_OAUTH_CLIENT_ID=Ov23li...`,
-    `GITHUB_OAUTH_CLIENT_SECRET=...`,
-    `BLANK_CLOUD_PUBLIC_URL=${hostHint.replace(/\/$/, "")}`,
-    `SESSION_SECRET=...   # long random string (install.sh generates this)`,
-  ];
+  const envExampleLines = hasGitHubConnectClientId()
+    ? []
+    : [
+        "# Option A (easiest): one line in data/github-oauth-client-id inside the container",
+        "# Option B: optional full redirect OAuth in .env",
+        `GITHUB_OAUTH_CLIENT_ID=Ov23li...`,
+        `GITHUB_OAUTH_CLIENT_SECRET=...`,
+        `BLANK_CLOUD_PUBLIC_URL=${hostHint.replace(/\/$/, "")}`,
+      ];
 
   return {
     webOAuthReady: missingForWebOAuth.length === 0,
-    deviceFlowReady: Boolean(clientId),
-    oneClickReady: Boolean(clientId),
+    deviceFlowReady: hasGitHubConnectClientId(),
+    oneClickReady: hasGitHubConnectClientId(),
     missingForWebOAuth,
     suggestedCallbackUrl,
     envExampleLines,

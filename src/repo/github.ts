@@ -26,9 +26,13 @@ const GH_HEADERS = {
   "User-Agent": "blank-cloud-agent",
 };
 
+import { resolveGitHubOAuthClientId } from "../auth/github-client-id.js";
+
 export function getGitHubOAuthClientId(): string {
-  return process.env.GITHUB_OAUTH_CLIENT_ID?.trim() || "";
+  return resolveGitHubOAuthClientId();
 }
+
+export { hasGitHubConnectClientId, resolveGitHubOAuthClientId } from "../auth/github-client-id.js";
 
 export function githubNoreplyEmail(id: number, login: string): string {
   return `${id}+${login}@users.noreply.github.com`;

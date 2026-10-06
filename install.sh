@@ -71,6 +71,15 @@ install_or_update_repo
 mkdir -p "$PROJECT_DIR"
 mkdir -p "${INSTALL_DIR}/data"
 
+if [[ ! -d "${PROJECT_DIR}/.git" ]]; then
+  git -C "$PROJECT_DIR" init -q 2>/dev/null || true
+fi
+
+if [[ -f "${INSTALL_DIR}/github-oauth-client-id" ]]; then
+  cp "${INSTALL_DIR}/github-oauth-client-id" "${INSTALL_DIR}/data/github-oauth-client-id"
+  chmod 600 "${INSTALL_DIR}/data/github-oauth-client-id"
+fi
+
 ENV_FILE="${INSTALL_DIR}/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   SESSION_SECRET="$(openssl rand -hex 32 2>/dev/null || true)"

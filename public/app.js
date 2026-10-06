@@ -541,20 +541,16 @@ function renderGitHubSetup(data) {
   const connected = data?.oneClickGitHubConnect
     ? Boolean(data.auth?.signedIn)
     : Boolean(data.github?.login);
-  if (!setup || connected || setup.webOAuthReady) {
+  if (!setup || connected || setup.oneClickReady) {
     el.hidden = true;
     el.textContent = "";
     return;
   }
   el.hidden = false;
-  const callback = setup.suggestedCallbackUrl ?? "(set BLANK_CLOUD_PUBLIC_URL)";
-  const lines = setup.envExampleLines?.join("\n") ?? "";
-  el.innerHTML = `<strong>Connect GitHub needs server .env</strong><br/>
-1. GitHub → Settings → Developer settings → <a href="https://github.com/settings/developers" target="_blank" rel="noopener">OAuth Apps</a> → New<br/>
-2. Callback URL: <code>${escapeHtml(callback)}</code><br/>
-3. Add to <code>~/blank-cloud/.env</code>:<br/>
-<pre>${escapeHtml(lines)}</pre>
-4. <code>cd ~/blank-cloud && docker compose up --build -d</code>`;
+  el.innerHTML = `<strong>Connect GitHub</strong> needs a public OAuth Client ID (one-time, not a secret).<br/>
+Create an OAuth App → enable <strong>Device Flow</strong> → paste Client ID into<br/>
+<code>~/blank-cloud/data/github-oauth-client-id</code> then <code>docker compose restart</code>.<br/>
+<a href="https://github.com/settings/applications/new" target="_blank" rel="noopener">New OAuth App on GitHub</a>`;
 }
 
 async function loadRepo() {
@@ -632,7 +628,7 @@ async function connectGitHub() {
     }
     renderGitHubSetup(repoSnapshot);
     throw new Error(
-      "GitHub OAuth is not configured on the server. See the setup steps under Connect GitHub in the sidebar.",
+      "Add a GitHub OAuth Client ID (device flow) — see the note under Connect GitHub.",
     );
   } catch (e) {
     addSystemNote(e.message);

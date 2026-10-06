@@ -36,7 +36,15 @@ curl -fsSL https://github.com/lamkln/blank-cloud/releases/latest/download/instal
 
 Installer options (prefix the command): `BLANK_CLOUD_INSTALL_DIR`, `BLANK_CLOUD_PROJECT`, `BLANK_CLOUD_REF` (default `main`), `BLANK_CLOUD_START=1` to start in the background after build.
 
-The installer creates `~/blank-cloud/.env`. Add your API key there, then run `cd ~/blank-cloud && docker compose up -d`.
+The installer creates `~/blank-cloud/.env`. Add your LLM API key in the Web UI (**Model**), then run `cd ~/blank-cloud && docker compose up -d`.
+
+### Out of the box
+
+| What | Setup |
+|------|--------|
+| **Run the agent on local files** | Put or clone code in `~/blank-cloud/project` (installer runs `git init` there). No GitHub required. |
+| **Connect GitHub** | Click **Connect GitHub** → approve on github.com/device (no PAT, no `.env` OAuth secret). Requires a **public OAuth Client ID** shipped with blank-cloud (`github-oauth-client-id` in the repo or `data/`). Official builds include this; forks add one line — see `github-oauth-client-id.bundled`. |
+| **Optional redirect OAuth** | Set `GITHUB_OAUTH_CLIENT_SECRET` + `BLANK_CLOUD_PUBLIC_URL` in `.env` for browser redirect instead of device flow. |
 
 ## Repository source
 
