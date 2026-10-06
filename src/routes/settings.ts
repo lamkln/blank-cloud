@@ -18,13 +18,14 @@ const keysSchema = z
     gemini: z.string().optional(),
     groq: z.string().optional(),
     openrouter: z.string().optional(),
+    nim: z.string().optional(),
     customApiKey: z.string().optional(),
   })
   .optional();
 
 const patchSchema = z.object({
   provider: z
-    .enum(["openai", "anthropic", "gemini", "groq", "openrouter", "custom"])
+    .enum(["openai", "anthropic", "gemini", "groq", "openrouter", "nim", "custom"])
     .optional(),
   model: z.string().min(1).optional(),
   customBaseUrl: z.string().optional(),
@@ -77,7 +78,9 @@ settings.patch("/", async (c) => {
           ? "gemini"
           : provider === "openrouter"
             ? "openrouter"
-            : provider;
+            : provider === "nim"
+              ? "nim"
+              : provider;
     keyUpdates[field] = data.apiKey.trim();
   }
 

@@ -7,7 +7,10 @@ export type LlmProvider =
   | "gemini"
   | "groq"
   | "openrouter"
+  | "nim"
   | "custom";
+
+export const DEFAULT_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   openai: "gpt-4o",
@@ -15,17 +18,22 @@ export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   gemini: "gemini-2.0-flash",
   groq: "llama-3.3-70b-versatile",
   openrouter: "openai/gpt-4o",
+  nim: "meta/llama-3.1-70b-instruct",
   custom: "gpt-4o",
 };
 
 export function parseProvider(raw: string | undefined): LlmProvider {
   const v = (raw ?? "openai").toLowerCase();
+  if (v === "nvidia-nim" || v === "nvidia_nim") {
+    return "nim";
+  }
   if (
     v === "openai" ||
     v === "anthropic" ||
     v === "gemini" ||
     v === "groq" ||
     v === "openrouter" ||
+    v === "nim" ||
     v === "custom"
   ) {
     return v;
@@ -39,6 +47,7 @@ export interface ProviderKeys {
   gemini: string;
   groq: string;
   openrouter: string;
+  nim: string;
   customApiKey: string;
 }
 
@@ -55,6 +64,7 @@ const KEY_FIELDS: Record<LlmProvider, keyof ProviderKeys | "customBaseUrl"> = {
   gemini: "gemini",
   groq: "groq",
   openrouter: "openrouter",
+  nim: "nim",
   custom: "customApiKey",
 };
 
@@ -75,18 +85,31 @@ function keysFromEnv(): ProviderKeys {
     gemini: process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || "",
     groq: process.env.GROQ_API_KEY?.trim() || "",
     openrouter: process.env.OPENROUTER_API_KEY?.trim() || "",
+    nim: process.env.NIM_API_KEY?.trim() || "",
     customApiKey: process.env.CUSTOM_OPENAI_API_KEY?.trim() || "",
   };
 }
 
+function defaultNimBaseUrl(): string {
+  return process.env.NIM_BASE_URL?.trim() || DEFAULT_NIM_BASE_URL;
+}
+
 function defaultSettings(): AppSettings {
   const provider = parseProvider(process.env.LLM_PROVIDER);
+  const baseUrl =
+    provider === "nim"
+      ? defaultNimBaseUrl()
+      : process.env.CUSTOM_OPENAI_BASE_URL?.trim() || "";
   return {
     provider,
     model: process.env.LLM_MODEL?.trim() || DEFAULT_MODELS[provider],
-    customBaseUrl: process.env.CUSTOM_OPENAI_BASE_URL?.trim() || "",
+    customBaseUrl: baseUrl,
     keys: keysFromEnv(),
   };
+}
+
+export function getNimBaseUrl(settings: AppSettings): string {
+  return settings.customBaseUrl.trim() || DEFAULT_NIM_BASE_URL;
 }
 
 export function ensureDataDir(): void {
@@ -144,21 +167,24 @@ export function updateAppSettings(
   if (partial.provider && !partial.model) {
     next.model = DEFAULT_MODELS[partial.provider];
   }
+  if (partial.provider === "nim" && !next.customBaseUrl.trim()) {
+    next.customBaseUrl = DEFAULT_NIM_BASE_URL;
+  }
   persistAppSettings(next);
   return next;
 }
 
 export function getApiKeyForProvider(provider: LlmProvider, settings = loadAppSettings()): string {
   const field = KEY_FIELDS[provider];
-  if (field === "customBaseUrl") {
-    return settings.keys.customApiKey;
-  }
-  return settings.keys[field];
+  return settings.keys[field as keyof ProviderKeys];
 }
 
 export function isProviderConfigured(provider: LlmProvider, settings = loadAppSettings()): boolean {
   if (provider === "custom") {
     return Boolean(settings.customBaseUrl.trim() && settings.keys.customApiKey.trim());
+  }
+  if (provider === "nim") {
+    return Boolean(settings.keys.nim.trim());
   }
   return Boolean(getApiKeyForProvider(provider, settings).trim());
 }
@@ -177,6 +203,7 @@ export function maskedKeys(settings: AppSettings): Record<keyof ProviderKeys, st
     gemini: maskSecret(settings.keys.gemini),
     groq: maskSecret(settings.keys.groq),
     openrouter: maskSecret(settings.keys.openrouter),
+    nim: maskSecret(settings.keys.nim),
     customApiKey: maskSecret(settings.keys.customApiKey),
   };
 }
