@@ -1,0 +1,11 @@
+# One-click updates from the Web UI (optional).
+# Copy to docker-compose.override.yml in your install directory.
+services:
+  blank-cloud:
+    volumes:
+      - .:/install
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      BLANK_CLOUD_INSTALL_DIR: /install
+      BLANK_CLOUD_UPDATE_APPLY: "1"
+      # BLANK_CLOUD_AUTO_APPLY: "1"

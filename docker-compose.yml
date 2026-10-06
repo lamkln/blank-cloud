@@ -7,6 +7,9 @@ services:
     volumes:
       - ${BLANK_CLOUD_PROJECT:-./project}:/workspace
       - ${BLANK_CLOUD_DATA:-./data}:/app/data
+      # Optional — one-click updates from the Web UI (see README):
+      # - ${BLANK_CLOUD_INSTALL:-.}:/install
+      # - /var/run/docker.sock:/var/run/docker.sock
     environment:
       PORT: "8787"
       WORKSPACE: /workspace
@@ -27,3 +30,9 @@ services:
       GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
       BLANK_CLOUD_PUBLIC_URL: ${BLANK_CLOUD_PUBLIC_URL:-}
       SESSION_SECRET: ${SESSION_SECRET:-}
+      # Optional Web UI auto-update (requires install + docker.sock mounts above):
+      BLANK_CLOUD_INSTALL_DIR: ${BLANK_CLOUD_INSTALL_DIR:-}
+      BLANK_CLOUD_UPDATE_APPLY: ${BLANK_CLOUD_UPDATE_APPLY:-0}
+      BLANK_CLOUD_AUTO_APPLY: ${BLANK_CLOUD_AUTO_APPLY:-0}
+      BLANK_CLOUD_AUTO_CHECK: ${BLANK_CLOUD_AUTO_CHECK:-1}
+      BLANK_CLOUD_REF: ${BLANK_CLOUD_REF:-main}

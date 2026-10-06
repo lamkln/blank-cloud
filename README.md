@@ -38,6 +38,35 @@ Installer options (prefix the command): `BLANK_CLOUD_INSTALL_DIR`, `BLANK_CLOUD_
 
 The installer creates `~/blank-cloud/.env`. Add your LLM API key in the Web UI (**Model**), then run `cd ~/blank-cloud && docker compose up -d`.
 
+### Auto-update
+
+The sidebar **Updates** panel checks [GitHub `main`](https://github.com/lamkln/blank-cloud) for new commits. Toggles:
+
+- **Auto-check daily** — background check (default on)
+- **Auto-apply when available** — runs `scripts/update.sh` when a update is found (only if one-click apply is enabled)
+
+**Manual update on the host** (always works):
+
+```bash
+cd ~/blank-cloud && bash scripts/update.sh
+```
+
+**Optional cron** (no Web UI):
+
+```bash
+0 4 * * * BLANK_CLOUD_INSTALL_DIR=$HOME/blank-cloud $HOME/blank-cloud/scripts/auto-update-cron.sh
+```
+
+**One-click update from the Web UI** mounts your install directory and the Docker socket (trusted home/LAN only):
+
+```bash
+cp docker-compose.override.example.yml docker-compose.override.yml
+# Edit .env: BLANK_CLOUD_UPDATE_APPLY=1
+docker compose up -d --build
+```
+
+Verify: `curl -s http://localhost:8787/health` includes `"ui":"auto-update"`.
+
 ### Out of the box
 
 | What | Setup |
