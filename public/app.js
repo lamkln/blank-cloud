@@ -152,7 +152,7 @@ function appendTerminal(line) {
 }
 
 const EMPTY_HTML = `<p class="empty-title">What should we build?</p>
-<p class="empty-body">The agent reads your mounted repo, proposes edits, and waits for your approval before writing files or running commands.</p>
+<p class="empty-body">Connect a git remote in the sidebar (or mount a folder via docker-compose), then describe the task. Approve changes before they land in the repo.</p>
 <ul class="empty-hints"><li>Fix a failing test</li><li>Add an API endpoint</li><li>Refactor a module</li></ul>`;
 
 function clearChat() {
@@ -487,6 +487,73 @@ async function loadHealth() {
   }
 }
 
+let repoSnapshot = null;
+
+function renderRepoStatus(data) {
+  repoSnapshot = data;
+  const el = $("repo-status");
+  if (!data) {
+    el.textContent = "Repository status unavailable.";
+    el.className = "fine-print repo-status warn";
+    return;
+  }
+  const mode =
+    data.mode === "remote"
+      ? "Remote clone → ./data/workspace"
+      : "Host mount (BLANK_CLOUD_PROJECT)";
+  let gitLine = "";
+  if (data.git?.isRepo) {
+    gitLine = ` · ${data.git.branch ?? "?"} · ${data.git.clean ? "clean" : `${data.git.changedFiles} changed`}`;
+  } else if (data.mode === "remote" && data.configured?.remoteUrl) {
+    gitLine = " · not cloned yet — click Clone / sync";
+  }
+  el.textContent = `${data.ready ? "Ready" : "Not ready"} (${mode})${gitLine}`;
+  el.className = `fine-print repo-status ${data.ready ? "ok" : "warn"}`;
+  $("workspace").textContent = data.workspace;
+  $("workspace").title = data.workspace;
+}
+
+async function loadRepo() {
+  try {
+    const data = await api("/repo");
+    $("repo-url").value = data.configured?.remoteUrl || "";
+    $("repo-branch").value = data.configured?.branch || "main";
+    $("repo-push").checked = Boolean(data.configured?.pushOnApprove);
+    $("repo-token").value = "";
+    renderRepoStatus(data);
+  } catch (e) {
+    renderRepoStatus(null);
+    $("repo-status").textContent = e.message;
+  }
+}
+
+async function saveRepo() {
+  const payload = {
+    remoteUrl: $("repo-url").value.trim(),
+    branch: $("repo-branch").value.trim() || "main",
+    pushOnApprove: $("repo-push").checked,
+  };
+  const token = $("repo-token").value.trim();
+  if (token) payload.gitToken = token;
+  await api("/repo", { method: "PATCH", body: JSON.stringify(payload) });
+  await loadRepo();
+}
+
+async function syncRepo() {
+  $("repo-sync").disabled = true;
+  try {
+    await saveRepo();
+    const res = await api("/repo/sync", { method: "POST", body: "{}" });
+    await loadRepo();
+    addSystemNote(`Repository ${res.action}: ${res.branch} @ ${res.workspace}`);
+  } catch (e) {
+    addSystemNote(e.message);
+    await loadRepo();
+  } finally {
+    $("repo-sync").disabled = false;
+  }
+}
+
 const API_KEY_LABELS = {
   openai: "OpenAI API key",
   anthropic: "Anthropic API key",
@@ -648,6 +715,8 @@ $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
 $("test-settings").addEventListener("click", () => void testSettingsConnection());
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
+$("repo-save").addEventListener("click", () => void saveRepo());
+$("repo-sync").addEventListener("click", () => void syncRepo());
 $("provider").addEventListener("change", () => {
   onProviderChange();
   setSettingsStatus("", null);
@@ -678,6 +747,7 @@ document.addEventListener("click", (e) => {
 });
 
 void loadHealth();
+void loadRepo();
 void loadSettings();
 void loadRuns();
 setStatus("idle");

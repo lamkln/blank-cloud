@@ -5,6 +5,7 @@ import {
   isProviderConfigured,
   listProvidersPublic,
   loadAppSettings,
+  resolveWorkspaceRoot,
   type AppSettings,
   updateAppSettings,
 } from "./settings/store.js";
@@ -13,7 +14,7 @@ export type { LlmProvider } from "./settings/store.js";
 export { DEFAULT_MODELS, parseProvider } from "./settings/store.js";
 
 export function getWorkspaceRoot(): string {
-  return path.resolve(process.env.WORKSPACE || "/workspace");
+  return resolveWorkspaceRoot(loadAppSettings());
 }
 
 export function getPort(): number {

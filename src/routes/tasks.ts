@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { getWorkspaceRoot } from "../config.js";
+import { commitAndPush, isWorkspaceReady } from "../repo/git.js";
 import {
   buildFailureContinuationUserMessage,
   buildRejectionUserMessage,
@@ -18,6 +20,7 @@ import {
   subscribe,
   updateTask,
 } from "../tasks/store.js";
+import { loadAppSettings, usesRemoteRepo } from "../settings/store.js";
 
 const tasks = new Hono();
 
@@ -42,6 +45,19 @@ tasks.post("/", async (c) => {
   const prompt = (body.prompt ?? body.message ?? "").trim();
   if (!prompt) {
     return c.json({ error: "prompt is required" }, 400);
+  }
+
+  const settings = loadAppSettings();
+  const root = getWorkspaceRoot();
+  if (!isWorkspaceReady(root, usesRemoteRepo(settings))) {
+    return c.json(
+      {
+        error: usesRemoteRepo(settings)
+          ? "Repository not cloned yet. Open Repository in the sidebar, save the remote URL, and click Clone / sync."
+          : "Workspace is not ready. Mount a project directory or connect a git remote in the Web UI.",
+      },
+      400,
+    );
   }
 
   const task = createTask(prompt);
@@ -153,8 +169,31 @@ tasks.post("/:id/approve", async (c) => {
 
   emit(task.id, "log", "Changes approved — applying to workspace");
 
+  const taskId = task.id;
+
+  async function maybePushAfterApply(): Promise<void> {
+    const settings = loadAppSettings();
+    if (!settings.repo.pushOnApprove || !usesRemoteRepo(settings)) return;
+    try {
+      const paths = proposal.files.map((f) => f.path);
+      const pushResult = await commitAndPush(
+        getWorkspaceRoot(),
+        settings.repo,
+        `blank-cloud: ${proposal.summary}`.slice(0, 200),
+        paths,
+      );
+      if (pushResult.pushed) {
+        emit(taskId, "log", `Pushed commit ${pushResult.commit} to origin`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      emit(taskId, "log", `Git push skipped: ${msg}`);
+    }
+  }
+
   const commands = proposal.commands;
   if (commands.length === 0) {
+    await maybePushAfterApply();
     updateTask(task.id, { status: "completed" });
     emit(task.id, "done", "Changes applied", { status: "completed" });
     return c.json({ id: task.id, status: "completed", applied: true, commandsRun: [] });
@@ -163,6 +202,10 @@ tasks.post("/:id/approve", async (c) => {
   const results = await runShellCommands(task.id, commands);
   const failed = results.find((r) => r.exitCode !== 0 || r.timedOut);
   const refreshed = getTask(task.id)!;
+
+  if (!failed) {
+    await maybePushAfterApply();
+  }
 
   if (failed) {
     const err = failed.timedOut

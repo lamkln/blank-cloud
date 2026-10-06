@@ -38,6 +38,40 @@ Installer options (prefix the command): `BLANK_CLOUD_INSTALL_DIR`, `BLANK_CLOUD_
 
 The installer creates `~/blank-cloud/.env`. Add your API key there, then run `cd ~/blank-cloud && docker compose up -d`.
 
+## Repository source
+
+blank-cloud edits a **real git workspace**, not just chat. Two ways to attach a repo:
+
+### 1. Web UI — GitHub or any git remote (recommended)
+
+In the sidebar **Repository** section:
+
+1. **Remote URL** — `https://github.com/you/app`, `you/app`, or SSH `git@github.com:you/app.git`
+2. **Branch** — e.g. `main`
+3. **Git token** — GitHub PAT (or GitLab token) for **private** clones and **push**
+4. **Save repo** → **Clone / sync** (stores clone under `./data/workspace` on the host)
+
+Optional: enable **Commit & push after approve** to push applied changes to `origin`.
+
+Env bootstrap (optional):
+
+```bash
+BLANK_CLOUD_REPO_URL=https://github.com/you/your-app.git
+BLANK_CLOUD_REPO_BRANCH=main
+GITHUB_TOKEN=ghp_...
+BLANK_CLOUD_PUSH_ON_APPROVE=1
+```
+
+When a remote URL is saved, the agent uses **`./data/workspace`** instead of the `BLANK_CLOUD_PROJECT` mount.
+
+### 2. Docker mount — existing checkout on the NAS
+
+Leave **Remote URL** empty and set `BLANK_CLOUD_PROJECT` to a folder that already contains your repo:
+
+```bash
+BLANK_CLOUD_PROJECT=/home/you/your-app
+```
+
 ## Quick start (manual)
 
 1. Clone this repository and create a `.env` file next to `docker-compose.yml` (see [API keys](#api-keys)).
@@ -127,6 +161,10 @@ curl -s -X PATCH http://localhost:8787/settings \
 |--------|------|-------------|
 | `GET` | `/` | Web UI |
 | `GET` | `/health` | Liveness and workspace path |
+| `GET` | `/repo` | Workspace mode, git status, configured remote |
+| `PATCH` | `/repo` | Save remote URL, branch, token, push-on-approve |
+| `POST` | `/repo/sync` | Clone or pull into the active workspace |
+| `POST` | `/repo/push` | Commit all changes and push (manual) |
 | `GET` | `/settings` | Active provider/model and which providers have keys configured |
 | `PATCH` | `/settings` | Change `provider`, `model`, `customBaseUrl`, or API keys |
 | `GET` | `/settings/nim/models` | List model ids from saved NIM key + base URL |

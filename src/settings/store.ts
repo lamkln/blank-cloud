@@ -51,11 +51,21 @@ export interface ProviderKeys {
   customApiKey: string;
 }
 
+/** Git remote source (GitHub, GitLab, or any git HTTPS/SSH URL). */
+export interface RepoSettings {
+  remoteUrl: string;
+  branch: string;
+  gitToken: string;
+  /** After approve, commit applied files and push to origin. */
+  pushOnApprove: boolean;
+}
+
 export interface AppSettings {
   provider: LlmProvider;
   model: string;
   customBaseUrl: string;
   keys: ProviderKeys;
+  repo: RepoSettings;
 }
 
 const KEY_FIELDS: Record<LlmProvider, keyof ProviderKeys | "customBaseUrl"> = {
@@ -94,6 +104,19 @@ function defaultNimBaseUrl(): string {
   return process.env.NIM_BASE_URL?.trim() || DEFAULT_NIM_BASE_URL;
 }
 
+function repoFromEnv(): RepoSettings {
+  return {
+    remoteUrl: process.env.BLANK_CLOUD_REPO_URL?.trim() || "",
+    branch: process.env.BLANK_CLOUD_REPO_BRANCH?.trim() || "main",
+    gitToken:
+      process.env.GITHUB_TOKEN?.trim() ||
+      process.env.GIT_TOKEN?.trim() ||
+      process.env.BLANK_CLOUD_GIT_TOKEN?.trim() ||
+      "",
+    pushOnApprove: process.env.BLANK_CLOUD_PUSH_ON_APPROVE === "1",
+  };
+}
+
 function defaultSettings(): AppSettings {
   const provider = parseProvider(process.env.LLM_PROVIDER);
   const baseUrl =
@@ -105,6 +128,7 @@ function defaultSettings(): AppSettings {
     model: process.env.LLM_MODEL?.trim() || DEFAULT_MODELS[provider],
     customBaseUrl: baseUrl,
     keys: keysFromEnv(),
+    repo: repoFromEnv(),
   };
 }
 
@@ -134,6 +158,7 @@ export function loadAppSettings(): AppSettings {
         model: raw.model?.trim() || base.model,
         customBaseUrl: raw.customBaseUrl?.trim() ?? base.customBaseUrl,
         keys: { ...base.keys, ...(raw.keys ?? {}) },
+        repo: { ...base.repo, ...(raw.repo ?? {}) },
       };
       return cached;
     } catch {
@@ -154,8 +179,9 @@ export function persistAppSettings(settings: AppSettings): void {
 }
 
 export function updateAppSettings(
-  partial: Partial<Omit<AppSettings, "keys">> & {
+  partial: Partial<Omit<AppSettings, "keys" | "repo">> & {
     keys?: Partial<ProviderKeys>;
+    repo?: Partial<RepoSettings>;
   },
 ): AppSettings {
   const current = loadAppSettings();
@@ -163,6 +189,7 @@ export function updateAppSettings(
     ...current,
     ...partial,
     keys: { ...current.keys, ...(partial.keys ?? {}) },
+    repo: { ...current.repo, ...(partial.repo ?? {}) },
   };
   if (partial.provider && partial.provider !== current.provider) {
     next.model = DEFAULT_MODELS[partial.provider];
@@ -219,6 +246,32 @@ export function listProvidersPublic(settings = loadAppSettings()) {
     configured: isProviderConfigured(id, settings),
     defaultModel: DEFAULT_MODELS[id],
   }));
+}
+
+export function maskedRepo(settings: AppSettings): Omit<RepoSettings, "gitToken"> & {
+  gitToken: string | null;
+} {
+  return {
+    remoteUrl: settings.repo.remoteUrl,
+    branch: settings.repo.branch,
+    pushOnApprove: settings.repo.pushOnApprove,
+    gitToken: maskSecret(settings.repo.gitToken),
+  };
+}
+
+export function getManagedWorkspacePath(): string {
+  return path.join(getDataDir(), "workspace");
+}
+
+export function usesRemoteRepo(settings = loadAppSettings()): boolean {
+  return Boolean(settings.repo.remoteUrl.trim());
+}
+
+export function resolveWorkspaceRoot(settings = loadAppSettings()): string {
+  if (usesRemoteRepo(settings)) {
+    return getManagedWorkspacePath();
+  }
+  return path.resolve(process.env.WORKSPACE || "/workspace");
 }
 
 export { KEY_FIELDS };
