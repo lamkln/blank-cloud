@@ -455,12 +455,20 @@ const API_KEY_LABELS = {
   gemini: "Google Gemini API key",
   groq: "Groq API key",
   openrouter: "OpenRouter API key",
+  nim: "NVIDIA NIM API key",
   custom: "Custom OpenAI-compatible API key",
 };
 
 function syncProviderFields() {
   const provider = $("provider").value;
-  $("custom-url-wrap").hidden = provider !== "custom";
+  const needsBase = provider === "custom" || provider === "nim";
+  $("custom-url-wrap").hidden = !needsBase;
+  $("base-url-label").textContent =
+    provider === "nim" ? "NIM base URL (OpenAI-compatible)" : "Base URL";
+  $("custom-base-url").placeholder =
+    provider === "nim"
+      ? "https://integrate.api.nvidia.com/v1"
+      : "https://api.example.com/v1";
   $("api-key-label").textContent = API_KEY_LABELS[provider] ?? "API key";
 }
 

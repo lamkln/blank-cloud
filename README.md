@@ -100,6 +100,7 @@ OPENAI_API_KEY=sk-...
 | Gemini | Google Gemini API key |
 | Groq | Groq API key |
 | OpenRouter | OpenRouter API key |
+| NVIDIA NIM | NIM API key + base URL ([NVIDIA Integrate](https://integrate.api.nvidia.com/v1) or self-hosted NIM) |
 | Custom | Base URL + API key |
 
 Programmatic settings (keys omitted unless you PATCH new values):

@@ -8,6 +8,7 @@ import {
   getProviderApiKey,
   getRuntimeSettings,
 } from "../config.js";
+import { getNimBaseUrl, loadAppSettings } from "../settings/store.js";
 
 export function createLanguageModel(): LanguageModel {
   const { provider, model, customBaseUrl } = getRuntimeSettings();
@@ -44,6 +45,14 @@ export function createLanguageModel(): LanguageModel {
         },
       });
       return openrouter(model);
+    }
+    case "nim": {
+      const settings = loadAppSettings();
+      const nim = createOpenAI({
+        apiKey: requireKey(getProviderApiKey("nim")),
+        baseURL: getNimBaseUrl(settings).replace(/\/$/, ""),
+      });
+      return nim(model);
     }
     case "custom": {
       const base = customBaseUrl.trim();
