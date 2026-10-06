@@ -63,6 +63,19 @@ BLANK_CLOUD_PUSH_ON_APPROVE=1
 
 When a repository is selected, the agent uses **`./data/workspace`** instead of the `BLANK_CLOUD_PROJECT` mount.
 
+### Shared brand (like @cursoragent)
+
+Cursor shows a **public bot identity** on commits; each user still connects **their** GitHub for repo access. On self-hosted blank-cloud you get the same **look** with one bot account:
+
+| Piece | What you set up |
+|--------|------------------|
+| **Public brand** | GitHub user `@your-blank-cloud-bot`, display name **blank-cloud agent**, public profile |
+| **Commit author** | Sidebar **Shared brand — commits show as** (default `blank-cloud agent`) + bot noreply email after **Connect** |
+| **Repo access** | Bot invited as **Write** collaborator; PAT on **bot** account (`repo` scope) |
+| **Everyone’s repos** | Not automatic — each owner must invite the bot (or use a future GitHub App) |
+
+Set `BLANK_CLOUD_GIT_AUTHOR_NAME` if you want a different brand string in env.
+
 ### GitHub bot account (like Cursor Agent)
 
 GitHub shows **who pushed** and **commit author** separately. For a dedicated bot identity:

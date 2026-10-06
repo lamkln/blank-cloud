@@ -12,6 +12,19 @@ export type LlmProvider =
 
 export const DEFAULT_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
+/** Public commit author name (Cursor-style shared brand, e.g. @cursoragent). */
+export const DEFAULT_COMMIT_BRAND_NAME = "blank-cloud agent";
+
+export function resolveCommitBrand(settings: RepoSettings): {
+  name: string;
+  email: string;
+} {
+  return {
+    name: settings.gitAuthorName.trim() || DEFAULT_COMMIT_BRAND_NAME,
+    email: settings.gitAuthorEmail.trim(),
+  };
+}
+
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   openai: "gpt-4o",
   anthropic: "claude-sonnet-4-20250514",
@@ -121,7 +134,8 @@ function repoFromEnv(): RepoSettings {
       process.env.BLANK_CLOUD_GIT_TOKEN?.trim() ||
       "",
     pushOnApprove: process.env.BLANK_CLOUD_PUSH_ON_APPROVE === "1",
-    gitAuthorName: process.env.BLANK_CLOUD_GIT_AUTHOR_NAME?.trim() || "blank-cloud agent",
+    gitAuthorName:
+      process.env.BLANK_CLOUD_GIT_AUTHOR_NAME?.trim() || DEFAULT_COMMIT_BRAND_NAME,
     gitAuthorEmail: process.env.BLANK_CLOUD_GIT_AUTHOR_EMAIL?.trim() || "",
     githubLogin: process.env.BLANK_CLOUD_GITHUB_LOGIN?.trim() || "",
     githubRepoFullName: process.env.BLANK_CLOUD_GITHUB_REPO?.trim() || "",
