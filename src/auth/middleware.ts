@@ -14,6 +14,28 @@ import {
 } from "../context/request.js";
 import { loadAppSettings } from "../settings/store.js";
 
+/** Routes that must work before a session cookie exists (device login). */
+const REPO_AUTH_EXEMPT = new Set([
+  "/repo/github/device/start",
+  "/repo/github/device/poll",
+  "/repo/github/link",
+]);
+
+function isSignedIn(c: Context): boolean {
+  const fromCtx = getRequestUser();
+  if (fromCtx?.gitToken) return true;
+  const login = getSessionLogin(c);
+  if (!login) return false;
+  const user = loadUser(login);
+  return Boolean(user?.gitToken);
+}
+
+function connectHint(c: Context) {
+  return isGitHubOAuthConfigured()
+    ? { signInUrl: "/auth/github/login" as const }
+    : { useConnectGitHub: true as const };
+}
+
 export function buildUserContext(user: UserRecord): RequestUserContext {
   const hasRemote = Boolean(user.repo.remoteUrl.trim() || user.repo.githubRepoFullName.trim());
   const workspaceRoot = hasRemote
@@ -46,18 +68,22 @@ export async function requireGitHubSignIn(c: Context, next: Next): Promise<Respo
     return;
   }
   const path = new URL(c.req.url).pathname;
+  if (REPO_AUTH_EXEMPT.has(path)) {
+    await next();
+    return;
+  }
   if (c.req.method === "GET" && (path === "/repo" || path === "/repo/")) {
     await next();
     return;
   }
-  if (getRequestUser()) {
+  if (isSignedIn(c)) {
     await next();
     return;
   }
   return c.json(
     {
       error: "Sign in with GitHub first",
-      signInUrl: "/auth/github/login",
+      ...connectHint(c),
     },
     401,
   );
