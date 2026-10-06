@@ -164,11 +164,16 @@ export function updateAppSettings(
     ...partial,
     keys: { ...current.keys, ...(partial.keys ?? {}) },
   };
-  if (partial.provider && !partial.model) {
+  if (partial.provider && partial.provider !== current.provider) {
     next.model = DEFAULT_MODELS[partial.provider];
+  } else if (partial.model?.trim()) {
+    next.model = partial.model.trim();
   }
   if (partial.provider === "nim" && !next.customBaseUrl.trim()) {
     next.customBaseUrl = DEFAULT_NIM_BASE_URL;
+  }
+  if (partial.customBaseUrl !== undefined) {
+    next.customBaseUrl = partial.customBaseUrl.trim();
   }
   persistAppSettings(next);
   return next;

@@ -459,6 +459,9 @@ const API_KEY_LABELS = {
   custom: "Custom OpenAI-compatible API key",
 };
 
+/** Last GET /settings payload — used when switching provider without round-trip reset. */
+let settingsSnapshot = null;
+
 function syncProviderFields() {
   const provider = $("provider").value;
   const needsBase = provider === "custom" || provider === "nim";
@@ -472,8 +475,27 @@ function syncProviderFields() {
   $("api-key-label").textContent = API_KEY_LABELS[provider] ?? "API key";
 }
 
+function refreshKeyHint() {
+  const provider = $("provider").value;
+  const masked = settingsSnapshot?.keys?.[providerKeyField(provider)];
+  $("key-hint").textContent = masked
+    ? `Saved: ${masked} (leave blank to keep)`
+    : "No key saved for this provider yet.";
+}
+
+function onProviderChange() {
+  const provider = $("provider").value;
+  const meta = settingsSnapshot?.providers?.find((p) => p.id === provider);
+  if (meta?.defaultModel) {
+    $("model").value = meta.defaultModel;
+  }
+  syncProviderFields();
+  refreshKeyHint();
+}
+
 async function loadSettings() {
   const data = await api("/settings");
+  settingsSnapshot = data;
   const select = $("provider");
   select.innerHTML = "";
   for (const p of data.providers) {
@@ -486,10 +508,7 @@ async function loadSettings() {
   $("model").value = data.model || "";
   $("custom-base-url").value = data.customBaseUrl || "";
   syncProviderFields();
-  const masked = data.keys?.[providerKeyField($("provider").value)];
-  $("key-hint").textContent = masked
-    ? `Saved: ${masked} (leave blank to keep)`
-    : "No key saved for this provider yet.";
+  refreshKeyHint();
   $("api-key").value = "";
   for (const input of document.querySelectorAll("[data-key]")) {
     input.value = "";
@@ -503,9 +522,13 @@ function providerKeyField(provider) {
 
 async function saveSettings() {
   const provider = $("provider").value;
+  let model = $("model").value.trim();
+  if (!model) {
+    model = settingsSnapshot?.providers?.find((p) => p.id === provider)?.defaultModel ?? "";
+  }
   const payload = {
     provider,
-    model: $("model").value.trim(),
+    model,
     customBaseUrl: $("custom-base-url").value.trim(),
   };
   const apiKey = $("api-key").value.trim();
@@ -519,10 +542,10 @@ async function saveSettings() {
   if (Object.keys(keys).length) payload.keys = keys;
 
   await api("/settings", { method: "PATCH", body: JSON.stringify(payload) });
+  await loadSettings();
   $("settings-popover").hidden = true;
   $("settings-toggle").setAttribute("aria-expanded", "false");
-  addSystemNote("Settings saved");
-  await loadSettings();
+  addSystemNote(`Active provider: ${settingsSnapshot?.provider ?? provider}`);
 }
 
 $("new-run").addEventListener("click", newRun);
@@ -531,14 +554,12 @@ $("approve").addEventListener("click", () => void approve());
 $("reject").addEventListener("click", () => void reject());
 $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
-$("provider").addEventListener("change", () => {
-  syncProviderFields();
-  void loadSettings();
-});
+$("provider").addEventListener("change", onProviderChange);
 
 $("settings-toggle").addEventListener("click", () => {
   const pop = $("settings-popover");
   const open = pop.hidden;
+  if (open) void loadSettings();
   pop.hidden = !open;
   $("settings-toggle").setAttribute("aria-expanded", String(open));
 });
