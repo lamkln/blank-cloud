@@ -275,6 +275,18 @@ curl -s -X POST http://localhost:8787/settings/test
 curl -s http://localhost:8787/settings/nim/models | jq
 ```
 
+### GitHub clone: “Repository not found”
+
+GitHub often returns this when the repo **does not exist**, your **token cannot access** it (private repo / wrong account), or the token was **revoked**. It is not always a wrong URL.
+
+1. Open `https://github.com/OWNER/REPO` in a browser while logged in as the same user you use in blank-cloud.
+2. **OAuth:** Sign out → **Sign in with GitHub** again, then re-select the repo.
+3. **PAT:** Use a classic token with **`repo`** scope, or a fine-grained token with **Contents: Read** (and Write if you push) on that repository.
+4. Remove a stale **`GITHUB_TOKEN`** from `.env` if it overrides the PAT you set in the UI.
+5. If a token appeared in an error or chat message, **revoke it** at [GitHub token settings](https://github.com/settings/tokens) and connect again.
+
+Errors from git no longer echo your token in API responses.
+
 ### Agent run “not found” after restart
 
 Tasks live in memory until the container restarts. Start a new run with **+** in the sidebar.
