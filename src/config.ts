@@ -9,11 +9,14 @@ import {
   type AppSettings,
   updateAppSettings,
 } from "./settings/store.js";
+import { getRequestUser } from "./context/request.js";
 
 export type { LlmProvider } from "./settings/store.js";
 export { DEFAULT_MODELS, parseProvider } from "./settings/store.js";
 
 export function getWorkspaceRoot(): string {
+  const ctx = getRequestUser();
+  if (ctx) return ctx.workspaceRoot;
   return resolveWorkspaceRoot(loadAppSettings());
 }
 

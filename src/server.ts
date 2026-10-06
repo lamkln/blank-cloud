@@ -7,6 +7,8 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { ensureWorkspace, getPort, getWorkspaceRoot } from "./config.js";
 import { ensureDataDir, loadAppSettings } from "./settings/store.js";
+import { attachUserContext, requireGitHubSignIn } from "./auth/middleware.js";
+import { authRoutes } from "./routes/auth.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { repoRoutes } from "./routes/repo.js";
 import { taskRoutes } from "./routes/tasks.js";
@@ -22,13 +24,19 @@ const app = new Hono();
 
 app.use("*", logger());
 app.use("*", cors());
+app.use("*", attachUserContext);
 
 app.get("/health", (c) =>
   c.json({ ok: true, workspace: getWorkspaceRoot() }),
 );
 
+app.route("/auth", authRoutes);
 app.route("/settings", settingsRoutes);
+app.use("/repo", requireGitHubSignIn);
+app.use("/repo/*", requireGitHubSignIn);
 app.route("/repo", repoRoutes);
+app.use("/tasks", requireGitHubSignIn);
+app.use("/tasks/*", requireGitHubSignIn);
 app.route("/tasks", taskRoutes);
 
 app.get("/", serveStatic({ root: publicRoot, path: "index.html" }));

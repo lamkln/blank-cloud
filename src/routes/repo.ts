@@ -17,14 +17,19 @@ import {
   pollGitHubDeviceFlow,
   startGitHubDeviceFlow,
 } from "../repo/github.js";
+import { authStatus } from "../auth/middleware.js";
+import { updateUser } from "../auth/users.js";
+import { getRequestUser } from "../context/request.js";
+import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
 import {
   DEFAULT_COMMIT_BRAND_NAME,
   loadAppSettings,
+  maskSecret,
   maskedRepo,
   resolveCommitBrand,
   updateAppSettings,
-  usesRemoteRepo,
 } from "../settings/store.js";
+import { isGitHubOAuthConfigured } from "../auth/github-oauth.js";
 
 const repo = new Hono();
 
@@ -54,11 +59,12 @@ const devicePollSchema = z.object({
 });
 
 repo.get("/", async (c) => {
-  const settings = loadAppSettings();
+  const app = loadAppSettings();
+  const repoSettings = activeRepoSettings();
   const root = getWorkspaceRoot();
   const git = await getGitStatus(root);
   let github: Awaited<ReturnType<typeof fetchGitHubUser>> | null = null;
-  const token = settings.repo.gitToken.trim();
+  const token = repoSettings.gitToken.trim();
   if (token) {
     try {
       github = await fetchGitHubUser(token);
@@ -66,10 +72,21 @@ repo.get("/", async (c) => {
       github = null;
     }
   }
+  const active = activeRepoSettings();
+  const configured = {
+    ...maskedRepo(app),
+    remoteUrl: active.remoteUrl,
+    branch: active.branch,
+    pushOnApprove: active.pushOnApprove,
+    githubLogin: active.githubLogin,
+    githubRepoFullName: active.githubRepoFullName,
+    gitToken: maskSecret(active.gitToken),
+  };
   return c.json({
     workspace: root,
-    mode: usesRemoteRepo(settings) ? "remote" : "mount",
-    configured: maskedRepo(settings),
+    mode: usesActiveRemoteRepo() ? "remote" : "mount",
+    configured,
+    auth: authStatus(c),
     github: github
       ? {
           login: github.login,
@@ -81,8 +98,9 @@ repo.get("/", async (c) => {
         }
       : null,
     githubDeviceFlowAvailable: Boolean(getGitHubOAuthClientId()),
+    githubOAuthSignIn: isGitHubOAuthConfigured(),
     git,
-    ready: isWorkspaceReady(root, usesRemoteRepo(settings)),
+    ready: isWorkspaceReady(root, usesActiveRemoteRepo()),
   });
 });
 
@@ -112,6 +130,11 @@ repo.patch("/", async (c) => {
     repoPatch.githubRepoFullName = data.githubRepoFullName.trim();
   }
 
+  const sessionUser = getRequestUser();
+  if (sessionUser && data.pushOnApprove !== undefined) {
+    updateUser(sessionUser.login, { repo: { pushOnApprove: data.pushOnApprove } });
+  }
+
   const next = updateAppSettings({ repo: repoPatch });
   const root = getWorkspaceRoot();
   await applyGitIdentity(root, next.repo).catch(() => {});
@@ -119,10 +142,9 @@ repo.patch("/", async (c) => {
 });
 
 repo.get("/github/repos", async (c) => {
-  const settings = loadAppSettings();
-  const token = settings.repo.gitToken.trim();
+  const token = activeRepoSettings().gitToken.trim();
   if (!token) {
-    return c.json({ error: "Connect GitHub first (token required)" }, 401);
+    return c.json({ error: "Sign in with GitHub first", signInUrl: "/auth/github/login" }, 401);
   }
   const q = c.req.query("q") ?? "";
   const page = Number(c.req.query("page") ?? "1") || 1;
@@ -148,9 +170,9 @@ repo.post("/github/select", async (c) => {
   }
 
   const settings = loadAppSettings();
-  const token = settings.repo.gitToken.trim();
+  const token = activeRepoSettings().gitToken.trim();
   if (!token) {
-    return c.json({ error: "Connect GitHub first" }, 401);
+    return c.json({ error: "Sign in with GitHub first", signInUrl: "/auth/github/login" }, 401);
   }
 
   const fullName = parsed.data.fullName.trim();
@@ -165,26 +187,30 @@ repo.post("/github/select", async (c) => {
   const branch = meta.default_branch || "main";
   const remoteUrl = meta.clone_url || `https://github.com/${fullName}.git`;
 
-  const next = updateAppSettings({
-    repo: {
-      remoteUrl,
-      branch,
-      githubRepoFullName: fullName,
-    },
-  });
+  const sessionUser = getRequestUser();
+  if (sessionUser) {
+    updateUser(sessionUser.login, {
+      repo: { remoteUrl, branch, githubRepoFullName: fullName },
+    });
+  } else {
+    updateAppSettings({
+      repo: { remoteUrl, branch, githubRepoFullName: fullName },
+    });
+  }
 
+  const repoForSync = { ...activeRepoSettings(), remoteUrl, branch, githubRepoFullName: fullName };
   const root = getWorkspaceRoot();
   let syncResult: Awaited<ReturnType<typeof syncRepository>> | null = null;
   if (parsed.data.sync !== false) {
     try {
-      syncResult = await syncRepository(root, next.repo);
-      await applyGitIdentity(root, next.repo);
+      syncResult = await syncRepository(root, repoForSync);
+      await applyGitIdentity(root, repoForSync);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return c.json(
         {
           error: message,
-          configured: maskedRepo(next),
+          configured: maskedRepo(settings),
           selected: { fullName, branch, remoteUrl },
         },
         400,
@@ -197,7 +223,7 @@ repo.post("/github/select", async (c) => {
     ok: true,
     selected: { fullName, branch, remoteUrl },
     sync: syncResult,
-    configured: maskedRepo(next),
+    configured: maskedRepo(settings),
     git,
     ready: isWorkspaceReady(root, true),
   });
@@ -350,13 +376,13 @@ repo.post("/github/device/poll", async (c) => {
 });
 
 repo.post("/sync", async (c) => {
-  const settings = loadAppSettings();
-  if (!settings.repo.remoteUrl.trim()) {
+  const repoSettings = activeRepoSettings();
+  if (!repoSettings.remoteUrl.trim()) {
     return c.json({ error: "Select a repository first" }, 400);
   }
   const root = getWorkspaceRoot();
   try {
-    const result = await syncRepository(root, settings.repo);
+    const result = await syncRepository(root, repoSettings);
     const git = await getGitStatus(root);
     return c.json({ ok: true, ...result, workspace: root, git });
   } catch (err) {
@@ -366,7 +392,7 @@ repo.post("/sync", async (c) => {
 });
 
 repo.post("/push", async (c) => {
-  const settings = loadAppSettings();
+  const repoSettings = activeRepoSettings();
   let message = "blank-cloud agent changes";
   try {
     const body = await c.req.json();
@@ -376,7 +402,7 @@ repo.post("/push", async (c) => {
   }
   const root = getWorkspaceRoot();
   try {
-    const result = await commitAndPush(root, settings.repo, message, []);
+    const result = await commitAndPush(root, repoSettings, message, []);
     const git = await getGitStatus(root);
     return c.json({ ok: true, ...result, git });
   } catch (err) {

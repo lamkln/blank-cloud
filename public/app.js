@@ -39,6 +39,7 @@ const state = {
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
@@ -536,6 +537,11 @@ function renderRepoStatus(data) {
 async function loadRepo() {
   try {
     const data = await api("/repo");
+    const auth = data.auth ?? {};
+    $("repo-signin-github").hidden = !auth.oauthEnabled || auth.signedIn;
+    $("repo-logout").hidden = !auth.signedIn;
+    $("repo-token-wrap").hidden = auth.oauthEnabled && auth.signedIn;
+    $("repo-connect-github").hidden = auth.oauthEnabled;
     $("repo-url").value = data.configured?.remoteUrl || "";
     $("repo-branch").value = data.configured?.branch || "main";
     $("repo-push").checked = Boolean(data.configured?.pushOnApprove);
@@ -547,13 +553,19 @@ async function loadRepo() {
     const gh = data.github;
     const linkEl = $("repo-github-link");
     if (gh?.login) {
-      linkEl.innerHTML = `Connected as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — choose a repo:`;
+      linkEl.innerHTML = auth.oauthEnabled
+        ? `Signed in as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — pick a repo:`
+        : `Connected as <a href="${escapeHtml(gh.html_url)}" target="_blank" rel="noopener">@${escapeHtml(gh.login)}</a> — pick a repo:`;
       linkEl.className = "fine-print repo-status ok";
       $("repo-picker").hidden = false;
       await refreshGitHubRepoList($("repo-search").value.trim());
+    } else if (auth.oauthEnabled) {
+      linkEl.textContent = "Sign in with GitHub, then pick a repository.";
+      linkEl.className = "fine-print";
+      $("repo-picker").hidden = true;
     } else {
       linkEl.textContent =
-        "Paste a GitHub personal access token (repo scope), then Connect GitHub.";
+        "Paste a GitHub personal access token (repo scope), then Connect (PAT).";
       linkEl.className = "fine-print";
       $("repo-picker").hidden = true;
     }
@@ -573,6 +585,12 @@ async function refreshGitHubRepoList(q) {
   } catch (e) {
     addSystemNote(e.message);
   }
+}
+
+async function logoutGitHub() {
+  await api("/auth/logout", { method: "POST", body: "{}" });
+  await loadRepo();
+  addSystemNote("Signed out of GitHub");
 }
 
 async function connectGitHub() {
@@ -839,6 +857,7 @@ $("load-nim-models").addEventListener("click", () => void loadNimModels());
 $("repo-save").addEventListener("click", () => void saveRepo());
 $("repo-sync").addEventListener("click", () => void syncRepo());
 $("repo-connect-github").addEventListener("click", () => void connectGitHub());
+$("repo-logout").addEventListener("click", () => void logoutGitHub());
 $("repo-device-github").addEventListener("click", () => void startGitHubDeviceSignIn());
 $("repo-search").addEventListener("input", () => {
   clearTimeout(repoSearchTimer);
