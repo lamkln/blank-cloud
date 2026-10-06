@@ -14,11 +14,15 @@ import { authRoutes } from "./routes/auth.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { repoRoutes } from "./routes/repo.js";
 import { taskRoutes } from "./routes/tasks.js";
+import { updateRoutes } from "./routes/update.js";
+import { BUILD_INFO } from "./build-info.generated.js";
+import { startAutoUpdateScheduler } from "./update/service.js";
 
 ensureWorkspace();
 ensureDataDir();
 ensureGitHubOAuthClientIdFile();
 loadAppSettings();
+startAutoUpdateScheduler();
 
 const appRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const publicRoot = path.join(appRoot, "public");
@@ -44,13 +48,15 @@ app.get("/health", (c) =>
   c.json({
     ok: true,
     version: appVersion.version ?? "0.0.0",
-    ui: "minimal-connect-github",
+    commit: BUILD_INFO.commit,
+    ui: "auto-update",
     workspace: getWorkspaceRoot(),
   }),
 );
 
 app.route("/auth", authRoutes);
 app.route("/settings", settingsRoutes);
+app.route("/update", updateRoutes);
 app.use("/repo", requireGitHubSignIn);
 app.use("/repo/*", requireGitHubSignIn);
 app.route("/repo", repoRoutes);
@@ -75,6 +81,7 @@ app.get("/api", (c) =>
     endpoints: {
       health: "/health",
       settings: "/settings",
+      update: "/update",
       repo: "/repo",
       tasks: "/tasks",
     },

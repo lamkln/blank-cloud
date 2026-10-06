@@ -1,4 +1,5 @@
-import { generateText, tool } from "ai";
+import { randomUUID } from "node:crypto";
+import { generateText, streamText, tool } from "ai";
 import { z } from "zod";
 import { createLanguageModel } from "../providers/model.js";
 import {
@@ -26,47 +27,8 @@ Behavior:
 
 Prefer minimal, correct changes. Do not run shell commands yourself except via proposed commands after approval.`;
 
-export async function runAgentTurn(taskId: string): Promise<void> {
-  const task = getTask(taskId);
-  if (!task) {
-    return;
-  }
-
-  updateTask(taskId, {
-    status: "running",
-    iteration: task.iteration + 1,
-  });
-  emit(taskId, "status", "Agent working…", { status: "running", iteration: task.iteration + 1 });
-
-  try {
-    const result = await generateText({
-      model: createLanguageModel(),
-      system: SYSTEM,
-      messages: task.messages.map((m) => ({ role: m.role, content: m.content })),
-      maxSteps: 16,
-      tools: buildTools(taskId),
-    });
-
-    const refreshed = getTask(taskId);
-    if (refreshed?.pendingProposal) {
-      if (result.text?.trim()) {
-        appendTaskMessage(taskId, "assistant", result.text.trim(), true);
-      }
-      return;
-    }
-
-    const assistantText = result.text?.trim();
-    if (assistantText) {
-      appendTaskMessage(taskId, "assistant", assistantText, true);
-    }
-
-    updateTask(taskId, { status: "completed" });
-    emit(taskId, "done", "Run finished", { status: "completed" });
-  } catch (err) {
-    const message = formatAgentError(err, { provider: getRuntimeSettings().provider });
-    updateTask(taskId, { status: "failed", lastError: message });
-    emit(taskId, "error", message, { status: "failed" });
-  }
+function modelMessages(task: TaskRecord) {
+  return task.messages.map((m) => ({ role: m.role, content: m.content }));
 }
 
 function buildTools(taskId: string) {
@@ -147,6 +109,123 @@ function buildTools(taskId: string) {
       },
     }),
   };
+}
+
+function rollbackMessagesSince(taskId: string, messageCountAtStart: number): void {
+  const task = getTask(taskId);
+  if (!task || task.messages.length <= messageCountAtStart) {
+    return;
+  }
+  updateTask(taskId, { messages: task.messages.slice(0, messageCountAtStart) });
+}
+
+async function finishAgentTurn(taskId: string): Promise<void> {
+  const refreshed = getTask(taskId);
+  if (refreshed?.pendingProposal) {
+    return;
+  }
+
+  updateTask(taskId, { status: "completed" });
+  emit(taskId, "done", "Run finished", { status: "completed" });
+}
+
+async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void> {
+  let streamId = randomUUID();
+  let segmentText = "";
+
+  const result = streamText({
+    model: createLanguageModel(),
+    system: SYSTEM,
+    messages: modelMessages(task),
+    maxSteps: 16,
+    tools: buildTools(taskId),
+    onChunk: ({ chunk }) => {
+      if (chunk.type !== "text-delta") {
+        return;
+      }
+      segmentText += chunk.textDelta;
+      emit(
+        taskId,
+        "message_delta",
+        segmentText,
+        { role: "assistant", streamId },
+        { persist: false },
+      );
+    },
+    onStepFinish: () => {
+      const trimmed = segmentText.trim();
+      if (trimmed) {
+        appendTaskMessage(taskId, "assistant", trimmed, true);
+      }
+      segmentText = "";
+      streamId = randomUUID();
+    },
+  });
+
+  await result.text;
+  await finishAgentTurn(taskId);
+}
+
+async function runBatchTurn(taskId: string, task: TaskRecord): Promise<void> {
+  const result = await generateText({
+    model: createLanguageModel(),
+    system: SYSTEM,
+    messages: modelMessages(task),
+    maxSteps: 16,
+    tools: buildTools(taskId),
+  });
+
+  const refreshed = getTask(taskId);
+  if (refreshed?.pendingProposal) {
+    if (result.text?.trim()) {
+      appendTaskMessage(taskId, "assistant", result.text.trim(), true);
+    }
+    return;
+  }
+
+  const assistantText = result.text?.trim();
+  if (assistantText) {
+    appendTaskMessage(taskId, "assistant", assistantText, true);
+  }
+
+  await finishAgentTurn(taskId);
+}
+
+export async function runAgentTurn(taskId: string): Promise<void> {
+  const task = getTask(taskId);
+  if (!task) {
+    return;
+  }
+
+  const messageCountAtStart = task.messages.length;
+
+  updateTask(taskId, {
+    status: "running",
+    iteration: task.iteration + 1,
+  });
+  emit(taskId, "status", "Agent working…", { status: "running", iteration: task.iteration + 1 });
+
+  try {
+    try {
+      await runStreamingTurn(taskId, getTask(taskId)!);
+    } catch (streamErr) {
+      rollbackMessagesSince(taskId, messageCountAtStart);
+      emit(
+        taskId,
+        "log",
+        "Streaming mode failed for this provider — retrying in standard mode.",
+      );
+      const refreshed = getTask(taskId);
+      if (!refreshed) {
+        throw streamErr;
+      }
+      await runBatchTurn(taskId, refreshed);
+    }
+  } catch (err) {
+    const message = formatAgentError(err, { provider: getRuntimeSettings().provider });
+    updateTask(taskId, { status: "failed", lastError: message });
+    emit(taskId, "error", message, { status: "failed" });
+  }
 }
 
 function formatPathError(e: unknown): string {

@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     ripgrep \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

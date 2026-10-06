@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 
 const EVENT_TYPES = [
   "message",
+  "message_delta",
   "log",
   "tool",
   "proposal",
@@ -35,7 +36,10 @@ const state = {
   pollTimer: null,
   seenEventIds: new Set(),
   terminalBody: null,
+  activeStream: null,
 };
+
+const md = () => window.blankCloudMarkdown;
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -108,12 +112,46 @@ function scrollThread() {
   el.scrollTop = el.scrollHeight;
 }
 
+function setTurnBody(bodyEl, text, streaming) {
+  bodyEl.classList.add("md-body");
+  const render = md()?.renderMarkdown;
+  if (render) {
+    bodyEl.innerHTML = render(text, streaming);
+  } else {
+    bodyEl.textContent = text;
+  }
+}
+
+function clearActiveStream() {
+  state.activeStream = null;
+}
+
+function upsertStreamingTurn(role, streamId, text) {
+  $("empty-state").hidden = true;
+  if (state.activeStream?.streamId === streamId && state.activeStream.wrap) {
+    setTurnBody(state.activeStream.body, text, true);
+    scrollThread();
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = `turn turn-${role}`;
+  wrap.innerHTML = `<div class="turn-label">${role === "user" ? "You" : "Agent"}</div><div class="turn-body"></div>`;
+  const body = wrap.querySelector(".turn-body");
+  body.dataset.streamId = streamId;
+  setTurnBody(body, text, true);
+  $("chat-thread").appendChild(wrap);
+  state.activeStream = { streamId, wrap, body, role };
+  scrollThread();
+}
+
 function addTurn(role, text) {
+  clearActiveStream();
   $("empty-state").hidden = true;
   const wrap = document.createElement("div");
   wrap.className = `turn turn-${role}`;
   wrap.innerHTML = `<div class="turn-label">${role === "user" ? "You" : "Agent"}</div><div class="turn-body"></div>`;
-  wrap.querySelector(".turn-body").textContent = text;
+  const body = wrap.querySelector(".turn-body");
+  setTurnBody(body, text, false);
   $("chat-thread").appendChild(wrap);
   scrollThread();
 }
@@ -165,6 +203,7 @@ function clearChat() {
   $("chat-thread").appendChild(empty);
   state.terminalBody = null;
   state.seenEventIds.clear();
+  clearActiveStream();
 }
 
 function ingestEvent(ev) {
@@ -175,8 +214,30 @@ function ingestEvent(ev) {
   const msg = ev.message ?? "";
   const role = ev.data?.role;
 
+  if (type === "message_delta") {
+    const streamId = ev.data?.streamId;
+    if (!streamId) return;
+    upsertStreamingTurn(role === "user" ? "user" : "agent", streamId, msg);
+    return;
+  }
   if (type === "message") {
-    addTurn(role === "user" ? "user" : "agent", msg);
+    const roleKey = role === "user" ? "user" : "agent";
+    if (
+      state.activeStream &&
+      roleKey === "agent" &&
+      ev.data?.streamId &&
+      state.activeStream.streamId === ev.data.streamId
+    ) {
+      setTurnBody(state.activeStream.body, msg, false);
+      clearActiveStream();
+      return;
+    }
+    if (state.activeStream && roleKey === "agent") {
+      setTurnBody(state.activeStream.body, msg, false);
+      clearActiveStream();
+      return;
+    }
+    addTurn(roleKey, msg);
     return;
   }
   if (type === "log") {
@@ -474,6 +535,93 @@ async function undoApply() {
     await refreshTask();
   } catch (e) {
     addSystemNote(e.message);
+  }
+}
+
+let updateSnapshot = null;
+
+function shortSha(sha) {
+  if (!sha || sha === "unknown") return "—";
+  return sha.slice(0, 7);
+}
+
+function renderUpdatePanel(data) {
+  updateSnapshot = data;
+  $("update-version").textContent = `v${data.version}${data.localCommit ? ` · ${shortSha(data.localCommit)}` : ""}`;
+  const statusEl = $("update-status");
+  statusEl.classList.toggle("has-update", Boolean(data.updateAvailable));
+  if (data.lastError && !data.updateAvailable) {
+    statusEl.textContent = `Check failed: ${data.lastError}`;
+  } else if (data.updateAvailable) {
+    statusEl.textContent = `Update available (${shortSha(data.remoteCommit)})${data.remoteMessage ? ` — ${data.remoteMessage}` : ""}`;
+  } else if (data.lastCheckAt) {
+    statusEl.textContent = `Up to date on ${data.ref} (checked ${new Date(data.lastCheckAt).toLocaleString()})`;
+  } else {
+    statusEl.textContent = "Not checked yet";
+  }
+  $("update-auto-check").checked = Boolean(data.autoCheckEnabled);
+  $("update-auto-apply").checked = Boolean(data.autoApplyEnabled);
+  $("update-auto-apply").disabled = !data.applyAvailable;
+  const applyBtn = $("update-apply");
+  applyBtn.hidden = !data.updateAvailable;
+  applyBtn.disabled = !data.applyAvailable;
+  const hint = $("update-hint");
+  if (data.applyAvailable) {
+    hint.textContent = "One-click update enabled (install dir + Docker socket mounted).";
+  } else {
+    hint.textContent =
+      "Host update: cd ~/blank-cloud && bash scripts/update.sh — or enable mounts in docker-compose (see README).";
+  }
+}
+
+async function loadUpdateStatus() {
+  try {
+    const data = await api("/update/status");
+    renderUpdatePanel(data);
+  } catch (e) {
+    $("update-status").textContent = e.message;
+  }
+}
+
+async function saveUpdateSettings() {
+  const payload = {
+    autoCheckEnabled: $("update-auto-check").checked,
+    autoApplyEnabled: $("update-auto-apply").checked,
+  };
+  try {
+    const data = await api("/update/settings", { method: "PATCH", body: JSON.stringify(payload) });
+    renderUpdatePanel(data);
+  } catch (e) {
+    $("update-status").textContent = e.message;
+  }
+}
+
+async function checkUpdatesNow() {
+  $("update-check").disabled = true;
+  try {
+    const data = await api("/update/check", { method: "POST", body: "{}" });
+    renderUpdatePanel(data);
+    if (data.error) addSystemNote(data.error);
+  } catch (e) {
+    $("update-status").textContent = e.message;
+  } finally {
+    $("update-check").disabled = false;
+  }
+}
+
+async function applyUpdateNow() {
+  if (!confirm("Pull latest blank-cloud and restart the container? Active agent runs may be interrupted.")) {
+    return;
+  }
+  $("update-apply").disabled = true;
+  try {
+    const data = await api("/update/apply", { method: "POST", body: "{}" });
+    renderUpdatePanel(data);
+    addSystemNote(data.message || data.error || "Update started");
+  } catch (e) {
+    addSystemNote(e.message);
+  } finally {
+    $("update-apply").disabled = false;
   }
 }
 
@@ -823,6 +971,10 @@ $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
 $("test-settings").addEventListener("click", () => void testSettingsConnection());
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
+$("update-check").addEventListener("click", () => void checkUpdatesNow());
+$("update-apply").addEventListener("click", () => void applyUpdateNow());
+$("update-auto-check").addEventListener("change", () => void saveUpdateSettings());
+$("update-auto-apply").addEventListener("change", () => void saveUpdateSettings());
 $("github-device-copy").addEventListener("click", async () => {
   const code = $("github-device-code").textContent?.trim();
   if (!code) return;
@@ -876,5 +1028,6 @@ void loadRepo().then(() => {
   }
 });
 void loadSettings();
+void loadUpdateStatus();
 void loadRuns();
 setStatus("idle");

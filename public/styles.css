@@ -350,6 +350,60 @@ textarea {
   border-top: 1px solid var(--border);
 }
 
+.update-panel {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.update-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.update-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.update-version {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.update-status {
+  margin: 0 0 8px;
+  min-height: 2.4em;
+}
+
+.update-status.has-update {
+  color: var(--accent);
+}
+
+.update-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 4px 0;
+  cursor: pointer;
+}
+
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .settings-toggle {
   display: inline-flex;
   align-items: center;
@@ -648,8 +702,89 @@ textarea {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text);
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.turn-body.md-body {
+  white-space: normal;
+}
+
+.turn-body.md-body p {
+  margin: 0 0 0.75em;
+}
+
+.turn-body.md-body p:last-child {
+  margin-bottom: 0;
+}
+
+.turn-body.md-body .md-heading {
+  margin: 0.6em 0 0.35em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.turn-body.md-body h1.md-heading {
+  font-size: 1.15em;
+}
+
+.turn-body.md-body h2.md-heading {
+  font-size: 1.05em;
+}
+
+.turn-body.md-body h3.md-heading {
+  font-size: 1em;
+  color: var(--text-secondary);
+}
+
+.turn-body.md-body .md-list {
+  margin: 0.35em 0 0.75em;
+  padding-left: 1.25em;
+}
+
+.turn-body.md-body .md-list li {
+  margin: 0.2em 0;
+}
+
+.turn-body.md-body .md-quote {
+  margin: 0.5em 0;
+  padding: 0.35em 0 0.35em 0.75em;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.turn-body.md-body .md-pre {
+  margin: 0.6em 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.turn-body.md-body .md-pre code {
+  white-space: pre;
+}
+
+.turn-body.md-body .md-inline {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.turn-body.md-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.turn-body.md-body a:hover {
+  text-decoration: underline;
 }
 
 .turn-user .turn-body {

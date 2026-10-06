@@ -86,6 +86,36 @@ export interface AppSettings {
   customBaseUrl: string;
   keys: ProviderKeys;
   repo: RepoSettings;
+  update: UpdateSettings;
+}
+
+export interface UpdateSettings {
+  autoCheckEnabled: boolean;
+  autoApplyEnabled: boolean;
+  /** Git branch to track (default main) */
+  ref: string;
+  checkIntervalHours: number;
+  lastCheckAt: string | null;
+  lastRemoteSha: string | null;
+  lastRemoteMessage: string | null;
+  lastRemoteDate: string | null;
+  lastApplyAt: string | null;
+  lastError: string | null;
+}
+
+export function defaultUpdateSettings(): UpdateSettings {
+  return {
+    autoCheckEnabled: process.env.BLANK_CLOUD_AUTO_CHECK !== "0",
+    autoApplyEnabled: process.env.BLANK_CLOUD_AUTO_APPLY === "1",
+    ref: process.env.BLANK_CLOUD_REF?.trim() || "main",
+    checkIntervalHours: Number(process.env.BLANK_CLOUD_UPDATE_INTERVAL_HOURS) || 24,
+    lastCheckAt: null,
+    lastRemoteSha: null,
+    lastRemoteMessage: null,
+    lastRemoteDate: null,
+    lastApplyAt: null,
+    lastError: null,
+  };
 }
 
 const KEY_FIELDS: Record<LlmProvider, keyof ProviderKeys | "customBaseUrl"> = {
@@ -154,6 +184,7 @@ function defaultSettings(): AppSettings {
     customBaseUrl: baseUrl,
     keys: keysFromEnv(),
     repo: repoFromEnv(),
+    update: defaultUpdateSettings(),
   };
 }
 
@@ -184,6 +215,7 @@ export function loadAppSettings(): AppSettings {
         customBaseUrl: raw.customBaseUrl?.trim() ?? base.customBaseUrl,
         keys: { ...base.keys, ...(raw.keys ?? {}) },
         repo: { ...base.repo, ...(raw.repo ?? {}) },
+        update: { ...base.update, ...(raw.update ?? {}) },
       };
       return cached;
     } catch {
@@ -204,9 +236,10 @@ export function persistAppSettings(settings: AppSettings): void {
 }
 
 export function updateAppSettings(
-  partial: Partial<Omit<AppSettings, "keys" | "repo">> & {
+  partial: Partial<Omit<AppSettings, "keys" | "repo" | "update">> & {
     keys?: Partial<ProviderKeys>;
     repo?: Partial<RepoSettings>;
+    update?: Partial<UpdateSettings>;
   },
 ): AppSettings {
   const current = loadAppSettings();
@@ -215,6 +248,7 @@ export function updateAppSettings(
     ...partial,
     keys: { ...current.keys, ...(partial.keys ?? {}) },
     repo: { ...current.repo, ...(partial.repo ?? {}) },
+    update: { ...current.update, ...(partial.update ?? {}) },
   };
   if (partial.provider && partial.provider !== current.provider) {
     next.model = DEFAULT_MODELS[partial.provider];
