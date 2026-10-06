@@ -50,8 +50,28 @@ async function api(path, options = {}) {
     body = text;
   }
   if (!res.ok) {
-    const msg = body?.error || (typeof body === "string" ? body : res.statusText);
-    throw new Error(msg || `HTTP ${res.status}`);
+    let msg = "";
+    if (body && typeof body.error === "string") {
+      msg = body.error;
+    } else if (body && body.error) {
+      msg = JSON.stringify(body.error);
+    } else if (typeof body === "string" && body.trim()) {
+      msg = body.trim();
+    } else {
+      msg = res.statusText || `HTTP ${res.status}`;
+    }
+
+    if (res.status === 404 && path.includes("/tasks/")) {
+      throw new Error(
+        "This agent run is no longer on the server (it was lost after a container restart). Start a new agent with +.",
+      );
+    }
+    if (res.status === 410 || msg.toLowerCase() === "gone") {
+      throw new Error(
+        "HTTP 410 Gone — LLM endpoint or model unavailable. Open Model settings and update provider, model, and base URL.",
+      );
+    }
+    throw new Error(`${msg} (HTTP ${res.status})`);
   }
   return body;
 }
@@ -168,7 +188,8 @@ function ingestEvent(ev) {
     return;
   }
   if (type === "error") {
-    addSystemNote(msg);
+    addSystemNote(msg.startsWith("Error:") ? msg : `Error: ${msg}`);
+    setStatus("failed");
     return;
   }
   if (type === "done") {
@@ -274,16 +295,27 @@ function renderChanges(task) {
 
 async function refreshTask() {
   if (!state.taskId) return;
-  const task = await api(`/tasks/${state.taskId}`);
-  setStatus(task.status);
-  $("run-title").textContent = task.title || "Agent";
-  $("run-meta").textContent = task.id;
-  $("approve").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
-  $("reject").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
-  $("undo").disabled = !task.canUndo;
-  renderChanges(task);
-  if (task.status === "running" || task.status === "executing") startPoll();
-  else stopPoll();
+  try {
+    const task = await api(`/tasks/${state.taskId}`);
+    setStatus(task.status);
+    $("run-title").textContent = task.title || "Agent";
+    $("run-meta").textContent =
+      task.status === "failed" && task.lastError
+        ? task.lastError
+        : task.id;
+    $("run-meta").className = task.status === "failed" && task.lastError ? "run-id error-text" : "run-id";
+    $("approve").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
+    $("reject").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
+    $("undo").disabled = !task.canUndo;
+    renderChanges(task);
+    if (task.status === "running" || task.status === "executing") startPoll();
+    else stopPoll();
+  } catch (e) {
+    stopPoll();
+    setStatus("failed");
+    $("run-meta").textContent = e.message;
+    addSystemNote(e.message);
+  }
 }
 
 function startPoll() {
