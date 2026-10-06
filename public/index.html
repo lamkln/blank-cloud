@@ -8,66 +8,125 @@
   </head>
   <body>
     <div class="app">
-      <aside class="runs-panel">
-        <div class="runs-header">
-          <div class="logo">blank-cloud</div>
-          <button type="button" class="icon-btn" id="new-run" title="New agent run">+</button>
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <a class="brand" href="/" aria-label="blank-cloud home">
+            <svg class="brand-mark" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+              <rect x="1" y="1" width="8" height="8" rx="2" fill="currentColor" opacity="0.9" />
+              <rect x="11" y="1" width="8" height="8" rx="2" fill="currentColor" opacity="0.35" />
+              <rect x="1" y="11" width="8" height="8" rx="2" fill="currentColor" opacity="0.35" />
+              <rect x="11" y="11" width="8" height="8" rx="2" fill="currentColor" opacity="0.9" />
+            </svg>
+            <span class="brand-name">blank-cloud</span>
+          </a>
+          <button type="button" class="btn-icon" id="new-run" title="New agent">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </button>
         </div>
-        <p class="runs-sub" id="workspace">workspace …</p>
-        <ul class="run-list" id="run-list"></ul>
-        <details class="settings-drawer">
-          <summary>Model &amp; provider</summary>
-          <label class="field">
-            <span>Provider</span>
-            <select id="provider"></select>
-          </label>
-          <label class="field">
-            <span>Model</span>
-            <input id="model" type="text" autocomplete="off" />
-          </label>
-          <label class="field" id="custom-url-wrap" hidden>
-            <span>Custom OpenAI base URL</span>
-            <input id="custom-base-url" type="url" autocomplete="off" />
-          </label>
-          <button type="button" class="btn ghost" id="save-settings">Save</button>
-          <p class="hint">Keys live in container env only.</p>
-        </details>
+
+        <div class="sidebar-section">
+          <div class="section-label">Workspace</div>
+          <div class="workspace-path" id="workspace" title="">…</div>
+        </div>
+
+        <div class="sidebar-section grow">
+          <div class="section-label">Agents</div>
+          <ul class="run-list" id="run-list"></ul>
+        </div>
+
+        <div class="sidebar-footer">
+          <button type="button" class="settings-toggle" id="settings-toggle" aria-expanded="false">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M8 10a2 2 0 100-4 2 2 0 000 4zm6.8-2.2l1.2-.9a.5.5 0 00.1-.6l-1.1-2a.5.5 0 00-.5-.3l-1.4.2a5.8 5.8 0 00-1.2-.7l-.2-1.4a.5.5 0 00-.3-.5l-2-1.1a.5.5 0 00-.6.1l-.9 1.2a5.8 5.8 0 00-1.4 0l-.9-1.2a.5.5 0 00-.6-.1l-2 1.1a.5.5 0 00-.3.5l-.2 1.4c-.4.2-.8.4-1.2.7l-1.4-.2a.5.5 0 00-.5.3l-1.1 2a.5.5 0 00.1.6l1.2.9c0 .5 0 1 0 1.4l-1.2.9a.5.5 0 00-.1.6l1.1 2c.1.2.3.3.5.3l1.4-.2c.4.3.8.5 1.2.7l.2 1.4c0 .2.2.4.3.5l2 1.1c.2.1.5 0 .6-.1l.9-1.2c.5 0 1 0 1.4 0l.9 1.2c.1.1.4.2.6.1l2-1.1c.2-.1.3-.3.3-.5l.2-1.4c.4-.2.8-.4 1.2-.7l1.4.2c.2 0 .4-.1.5-.3l1.1-2a.5.5 0 00-.1-.6l-1.2-.9c0-.5 0-1 0-1.4z"
+              />
+            </svg>
+            Model
+          </button>
+          <div class="settings-popover" id="settings-popover" hidden>
+            <label class="field">
+              <span>Provider</span>
+              <select id="provider"></select>
+            </label>
+            <label class="field">
+              <span>Model</span>
+              <input id="model" type="text" spellcheck="false" autocomplete="off" />
+            </label>
+            <label class="field" id="custom-url-wrap" hidden>
+              <span>Base URL</span>
+              <input id="custom-base-url" type="url" spellcheck="false" autocomplete="off" />
+            </label>
+            <button type="button" class="btn btn-sm" id="save-settings">Save</button>
+            <p class="fine-print">API keys are configured in the container environment.</p>
+          </div>
+        </div>
       </aside>
 
-      <section class="chat-panel">
-        <header class="chat-header">
-          <div>
-            <h1 id="run-title">New agent run</h1>
-            <p class="run-meta" id="run-meta">Describe a coding task below</p>
+      <section class="main">
+        <header class="main-header">
+          <div class="header-titles">
+            <h1 id="run-title">New agent</h1>
+            <p id="run-meta" class="run-id"></p>
           </div>
-          <div class="status-chip idle" id="status-chip">idle</div>
+          <div class="header-status">
+            <span class="status-dot idle" id="status-dot"></span>
+            <span id="status-label">Ready</span>
+          </div>
         </header>
-        <div class="chat-thread" id="chat-thread"></div>
-        <footer class="composer">
-          <textarea
-            id="composer-input"
-            rows="2"
-            placeholder="Ask the agent to implement, fix, or refactor code in your mounted project…"
-          ></textarea>
-          <div class="composer-actions">
-            <span class="hint">Enter to send · Shift+Enter for newline</span>
-            <button type="button" class="btn primary" id="send-btn">Send</button>
+
+        <div class="thread-wrap">
+          <div class="chat-thread" id="chat-thread">
+            <div class="empty-state" id="empty-state">
+              <p class="empty-title">What should we build?</p>
+              <p class="empty-body">
+                The agent reads your mounted repo, proposes edits, and waits for your approval before
+                writing files or running commands.
+              </p>
+              <ul class="empty-hints">
+                <li>Fix a failing test</li>
+                <li>Add an API endpoint</li>
+                <li>Refactor a module</li>
+              </ul>
+            </div>
           </div>
+        </div>
+
+        <footer class="composer-wrap">
+          <div class="composer">
+            <textarea
+              id="composer-input"
+              rows="1"
+              placeholder="Message blank-cloud…"
+            ></textarea>
+            <button type="button" class="btn-send" id="send-btn" title="Send message">
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M8 14L7 8l-6-1 13-5-5 13-1-6z"
+                  fill="currentColor"
+                  transform="translate(0 1)"
+                />
+              </svg>
+            </button>
+          </div>
+          <p class="composer-hint"><kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line</p>
         </footer>
       </section>
 
-      <aside class="changes-panel" id="changes-panel" hidden>
-        <header class="changes-header">
-          <h2>Changes</h2>
-          <p id="change-summary"></p>
+      <aside class="review-panel" id="changes-panel" hidden>
+        <header class="review-header">
+          <div class="section-label">Review</div>
+          <p class="review-summary" id="change-summary"></p>
         </header>
-        <div class="change-actions">
-          <button type="button" class="btn primary" id="approve">Approve</button>
-          <button type="button" class="btn ghost" id="reject">Reject</button>
-          <button type="button" class="btn ghost" id="undo">Undo apply</button>
+        <div class="review-actions">
+          <button type="button" class="btn btn-accent" id="approve">Accept</button>
+          <button type="button" class="btn" id="reject">Reject</button>
+          <button type="button" class="btn btn-quiet" id="undo">Revert apply</button>
         </div>
-        <div id="change-files"></div>
-        <div id="change-commands" class="commands"></div>
+        <div class="review-files" id="change-files"></div>
+        <div class="review-commands" id="change-commands"></div>
       </aside>
     </div>
     <script src="/ui/app.js" type="module"></script>
