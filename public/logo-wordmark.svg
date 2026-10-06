@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 40" role="img" aria-label="blank-cloud">
+  <title>blank-cloud</title>
+  <g transform="translate(0 10)">
+    <rect x="0" y="0" width="8" height="8" rx="2" fill="#f5f5f5" opacity="0.92"/>
+    <rect x="10" y="0" width="8" height="8" rx="2" fill="#f5f5f5" opacity="0.36"/>
+    <rect x="0" y="10" width="8" height="8" rx="2" fill="#f5f5f5" opacity="0.36"/>
+    <rect x="10" y="10" width="8" height="8" rx="2" fill="#f5f5f5" opacity="0.92"/>
+  </g>
+  <text
+    x="36"
+    y="26"
+    fill="#f5f5f5"
+    font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    font-size="18"
+    font-weight="600"
+    letter-spacing="-0.02em"
+  >blank-cloud</text>
+</svg>
