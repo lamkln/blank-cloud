@@ -10,6 +10,7 @@ import {
 import { setPendingProposal } from "./proposals.js";
 import { appendTaskMessage, emit, getTask, updateTask } from "./store.js";
 import type { TaskRecord } from "./types.js";
+import { getRuntimeSettings } from "../config.js";
 import { formatAgentError } from "../agent/errors.js";
 
 const SYSTEM = `You are blank-cloud, a self-hosted coding agent similar to Cursor Cloud Agent.
@@ -67,7 +68,7 @@ export async function runAgentTurn(taskId: string): Promise<void> {
     updateTask(taskId, { status: "completed" });
     emit(taskId, "done", "Run finished", { status: "completed" });
   } catch (err) {
-    const message = formatAgentError(err);
+    const message = formatAgentError(err, { provider: getRuntimeSettings().provider });
     updateTask(taskId, { status: "failed", lastError: message });
     emit(taskId, "error", message, { status: "failed" });
   }

@@ -70,6 +70,12 @@
               />
             </label>
             <p class="fine-print" id="key-hint"></p>
+            <p class="fine-print nim-help" id="nim-help" hidden>
+              NVIDIA cloud API often returns <strong>HTTP 410</strong> on chat if your
+              build.nvidia.com org lacks <em>Public API Endpoints</em> (listing models may still work).
+              Contact <a href="mailto:help@build.nvidia.com">help@build.nvidia.com</a> or point the base URL at
+              self-hosted NIM (<code>http://HOST:8000/v1</code>). Save, then use Test connection.
+            </p>
             <details class="keys-advanced">
               <summary>All provider keys</summary>
               <label class="field"><span>OpenAI</span><input data-key="openai" type="password" autocomplete="off" /></label>
@@ -80,7 +86,12 @@
               <label class="field"><span>NVIDIA NIM</span><input data-key="nim" type="password" autocomplete="off" /></label>
               <label class="field"><span>Custom key</span><input data-key="customApiKey" type="password" autocomplete="off" /></label>
             </details>
-            <button type="button" class="btn btn-sm" id="save-settings">Save settings</button>
+            <div class="settings-actions">
+              <button type="button" class="btn btn-sm" id="save-settings">Save settings</button>
+              <button type="button" class="btn btn-sm" id="test-settings">Test connection</button>
+              <button type="button" class="btn btn-sm" id="load-nim-models" hidden>Load NIM models</button>
+            </div>
+            <p class="fine-print settings-status" id="settings-status" hidden></p>
             <p class="fine-print">Stored in <code>/app/data/settings.json</code> on the host (<code>./data</code> by default).</p>
           </div>
         </div>

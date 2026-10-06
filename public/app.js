@@ -67,9 +67,16 @@ async function api(path, options = {}) {
       );
     }
     if (res.status === 410 || msg.toLowerCase() === "gone") {
-      throw new Error(
-        "HTTP 410 Gone — LLM endpoint or model unavailable. Open Model settings and update provider, model, and base URL.",
-      );
+      const detailed =
+        body && typeof body.error === "string" && body.error.trim().length > 0
+          ? body.error.trim()
+          : null;
+      const provider = settingsSnapshot?.provider;
+      const nim410 =
+        provider === "nim"
+          ? "NVIDIA NIM HTTP 410 — usually missing Public API Endpoints on build.nvidia.com (not wrong model). Email help@build.nvidia.com or use self-hosted NIM. Settings → Save → Test connection."
+          : null;
+      throw new Error(detailed || nim410 || msg);
     }
     throw new Error(`${msg} (HTTP ${res.status})`);
   }
@@ -494,10 +501,26 @@ const API_KEY_LABELS = {
 /** Last GET /settings payload — used when switching provider without round-trip reset. */
 let settingsSnapshot = null;
 
+function setSettingsStatus(text, kind) {
+  const el = $("settings-status");
+  if (!text) {
+    el.hidden = true;
+    el.textContent = "";
+    el.classList.remove("ok", "err");
+    return;
+  }
+  el.hidden = false;
+  el.textContent = text;
+  el.classList.remove("ok", "err");
+  if (kind) el.classList.add(kind);
+}
+
 function syncProviderFields() {
   const provider = $("provider").value;
   const needsBase = provider === "custom" || provider === "nim";
   $("custom-url-wrap").hidden = !needsBase;
+  $("nim-help").hidden = provider !== "nim";
+  $("load-nim-models").hidden = provider !== "nim";
   $("base-url-label").textContent =
     provider === "nim" ? "NIM base URL (OpenAI-compatible)" : "Base URL";
   $("custom-base-url").placeholder =
@@ -575,9 +598,47 @@ async function saveSettings() {
 
   await api("/settings", { method: "PATCH", body: JSON.stringify(payload) });
   await loadSettings();
-  $("settings-popover").hidden = true;
-  $("settings-toggle").setAttribute("aria-expanded", "false");
+  setSettingsStatus("Settings saved.", "ok");
   addSystemNote(`Active provider: ${settingsSnapshot?.provider ?? provider}`);
+}
+
+async function testSettingsConnection() {
+  setSettingsStatus("Testing LLM connection…", null);
+  try {
+    const res = await api("/settings/test", { method: "POST", body: "{}" });
+    setSettingsStatus(
+      `Connection OK (${res.provider} / ${res.model}): ${res.reply || "OK"}`,
+      "ok",
+    );
+  } catch (e) {
+    setSettingsStatus(e.message, "err");
+  }
+}
+
+async function loadNimModels() {
+  setSettingsStatus("Loading models from NIM…", null);
+  try {
+    const res = await api("/settings/nim/models");
+    const models = res.models || [];
+    if (!models.length) {
+      setSettingsStatus(`No models returned from ${res.base}.`, "err");
+      return;
+    }
+    const current = $("model").value.trim();
+    if (!current || !models.includes(current)) {
+      $("model").value = models[0];
+    }
+    const preview =
+      models.length <= 8
+        ? models.join(", ")
+        : `${models.slice(0, 6).join(", ")} … (+${models.length - 6} more)`;
+    setSettingsStatus(
+      `Listed ${models.length} model(s) from ${res.base}. Pick one in Model, then Save and Test connection.\n${preview}`,
+      "ok",
+    );
+  } catch (e) {
+    setSettingsStatus(e.message, "err");
+  }
 }
 
 $("new-run").addEventListener("click", newRun);
@@ -586,7 +647,12 @@ $("approve").addEventListener("click", () => void approve());
 $("reject").addEventListener("click", () => void reject());
 $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
-$("provider").addEventListener("change", onProviderChange);
+$("test-settings").addEventListener("click", () => void testSettingsConnection());
+$("load-nim-models").addEventListener("click", () => void loadNimModels());
+$("provider").addEventListener("change", () => {
+  onProviderChange();
+  setSettingsStatus("", null);
+});
 
 $("settings-toggle").addEventListener("click", () => {
   const pop = $("settings-popover");
