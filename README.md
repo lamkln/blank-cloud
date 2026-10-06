@@ -144,6 +144,8 @@ docker compose up --build
 
 The agent listens on **http://localhost:8787**. Your project is mounted at `/workspace` inside the container.
 
+**Build error `open …/data/users: permission denied`:** `./data` is created by the container (often as root). It must not be sent as Docker build context — keep an up-to-date `.dockerignore` that lists `data` and `project`, then run `docker compose build` again.
+
 Open **http://localhost:8787/** for the **Web UI** (Cursor Cloud Agent–style): agent runs in a chat thread, diff review in the side panel, **Approve / Reject**, follow-up messages, and undo. The JSON API remains on the same port.
 
 ## docker-compose.yml
