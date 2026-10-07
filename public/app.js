@@ -126,30 +126,48 @@ function clearActiveStream() {
   state.activeStream = null;
 }
 
+function turnInnerHtml(role) {
+  const isUser = role === "user";
+  const avatar = isUser ? "You" : "AI";
+  const avatarClass = isUser ? "turn-avatar user" : "turn-avatar agent";
+  if (isUser) {
+    return `<div class="turn-row">
+      <div class="turn-bubble user-bubble"><div class="turn-body"></div></div>
+      <div class="${avatarClass}" aria-hidden="true">${avatar}</div>
+    </div>`;
+  }
+  return `<div class="turn-row">
+    <div class="${avatarClass}" aria-hidden="true">${avatar}</div>
+    <div class="turn-bubble agent-bubble"><div class="turn-body"></div></div>
+  </div>`;
+}
+
 function upsertStreamingTurn(role, streamId, text) {
   $("empty-state").hidden = true;
+  const roleKey = role === "user" ? "user" : "agent";
   if (state.activeStream?.streamId === streamId && state.activeStream.wrap) {
     setTurnBody(state.activeStream.body, text, true);
     scrollThread();
     return;
   }
   const wrap = document.createElement("div");
-  wrap.className = `turn turn-${role}`;
-  wrap.innerHTML = `<div class="turn-label">${role === "user" ? "You" : "Agent"}</div><div class="turn-body"></div>`;
+  wrap.className = `turn turn-${roleKey}`;
+  wrap.innerHTML = turnInnerHtml(roleKey);
   const body = wrap.querySelector(".turn-body");
   body.dataset.streamId = streamId;
   setTurnBody(body, text, true);
   $("chat-thread").appendChild(wrap);
-  state.activeStream = { streamId, wrap, body, role };
+  state.activeStream = { streamId, wrap, body, role: roleKey };
   scrollThread();
 }
 
 function addTurn(role, text) {
   clearActiveStream();
   $("empty-state").hidden = true;
+  const roleKey = role === "user" ? "user" : "agent";
   const wrap = document.createElement("div");
-  wrap.className = `turn turn-${role}`;
-  wrap.innerHTML = `<div class="turn-label">${role === "user" ? "You" : "Agent"}</div><div class="turn-body"></div>`;
+  wrap.className = `turn turn-${roleKey}`;
+  wrap.innerHTML = turnInnerHtml(roleKey);
   const body = wrap.querySelector(".turn-body");
   setTurnBody(body, text, false);
   $("chat-thread").appendChild(wrap);
