@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="icon" type="image/png" sizes="32x32" href="/ui/favicon-32.png" />
     <link rel="apple-touch-icon" href="/ui/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/ui/styles.css?v=0.4.0" />
+    <link rel="stylesheet" href="/ui/styles.css?v=0.4.1" />
   </head>
   <body class="owui">
     <div class="app">
@@ -124,7 +124,13 @@
             <p class="fine-print">Stored in <code>/app/data/settings.json</code> on the host (<code>./data</code> by default).</p>
           </div>
           <div class="update-panel" id="update-panel" hidden>
+            <div class="update-head">
+              <span class="update-title">Update available</span>
+              <span class="update-version" id="update-version"></span>
+            </div>
+            <p class="fine-print update-status" id="update-status"></p>
             <button type="button" class="btn btn-sm btn-primary" id="update-apply">Update now</button>
+            <p class="fine-print" id="update-hint"></p>
           </div>
         </div>
       </aside>
