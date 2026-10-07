@@ -49,7 +49,7 @@ app.get("/health", (c) =>
     ok: true,
     version: appVersion.version ?? "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "chatbox-redesign",
+    ui: "fix-custom-model",
     workspace: getWorkspaceRoot(),
   }),
 );

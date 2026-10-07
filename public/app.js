@@ -904,6 +904,19 @@ function syncProviderFields() {
       ? "https://integrate.api.nvidia.com/v1"
       : "https://api.example.com/v1";
   $("api-key-label").textContent = API_KEY_LABELS[provider] ?? "API key";
+  const modelInput = $("model");
+  if (provider === "custom") {
+    modelInput.placeholder = "e.g. llama3.2, gpt-4o, my-endpoint-model";
+    modelInput.removeAttribute("readonly");
+  } else {
+    modelInput.placeholder = metaDefaultPlaceholder(provider);
+    modelInput.removeAttribute("readonly");
+  }
+}
+
+function metaDefaultPlaceholder(provider) {
+  const meta = settingsSnapshot?.providers?.find((p) => p.id === provider);
+  return meta?.defaultModel ? `Default: ${meta.defaultModel}` : "";
 }
 
 function refreshKeyHint() {
@@ -917,8 +930,20 @@ function refreshKeyHint() {
 function onProviderChange() {
   const provider = $("provider").value;
   const meta = settingsSnapshot?.providers?.find((p) => p.id === provider);
-  if (meta?.defaultModel) {
-    $("model").value = meta.defaultModel;
+  const modelEl = $("model");
+  const current = modelEl.value.trim();
+  const prevId = settingsSnapshot?.provider;
+  const prevDefault =
+    settingsSnapshot?.providers?.find((p) => p.id === prevId)?.defaultModel ?? "";
+  const savedModel = (settingsSnapshot?.model ?? "").trim();
+  const shouldReplace =
+    !current || current === prevDefault || (prevId && current === savedModel && prevId !== provider);
+  if (shouldReplace) {
+    if (provider === "custom") {
+      modelEl.value = savedModel && settingsSnapshot?.provider === "custom" ? savedModel : "";
+    } else if (meta?.defaultModel) {
+      modelEl.value = meta.defaultModel;
+    }
   }
   syncProviderFields();
   refreshKeyHint();
@@ -956,6 +981,10 @@ async function saveSettings() {
   let model = $("model").value.trim();
   if (!model) {
     model = settingsSnapshot?.providers?.find((p) => p.id === provider)?.defaultModel ?? "";
+  }
+  if (provider === "custom" && !model) {
+    setSettingsStatus("Custom provider needs a model ID (exact name your API expects).", "err");
+    return;
   }
   const payload = {
     provider,

@@ -32,7 +32,7 @@ export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   groq: "llama-3.3-70b-versatile",
   openrouter: "openai/gpt-4o",
   nim: "meta/llama-3.1-8b-instruct",
-  custom: "gpt-4o",
+  custom: "",
 };
 
 export function parseProvider(raw: string | undefined): LlmProvider {
@@ -250,10 +250,10 @@ export function updateAppSettings(
     repo: { ...current.repo, ...(partial.repo ?? {}) },
     update: { ...current.update, ...(partial.update ?? {}) },
   };
-  if (partial.provider && partial.provider !== current.provider) {
-    next.model = DEFAULT_MODELS[partial.provider];
-  } else if (partial.model?.trim()) {
+  if (partial.model?.trim()) {
     next.model = partial.model.trim();
+  } else if (partial.provider && partial.provider !== current.provider) {
+    next.model = DEFAULT_MODELS[partial.provider];
   }
   if (partial.provider === "nim" && !next.customBaseUrl.trim()) {
     next.customBaseUrl = DEFAULT_NIM_BASE_URL;
