@@ -56,9 +56,70 @@ textarea {
 
 .app {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 340px;
+  grid-template-columns: 280px minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
+}
+
+.app.review-open {
+  grid-template-columns: 280px minmax(0, 1fr) 340px;
+}
+
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.model-bar:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.model-bar-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.model-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.model-bar-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.model-bar-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-new-chat {
@@ -67,7 +128,7 @@ textarea {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  margin-bottom: 10px;
+  margin-bottom: 0;
   padding: 10px 12px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -396,38 +457,38 @@ textarea {
   width: 100%;
 }
 
-.settings-toggle {
+.sidebar-toolbar {
+  display: flex;
+  gap: 6px;
+}
+
+.sidebar-tool {
+  flex: 1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   border: 1px solid var(--border);
   background: transparent;
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 8px 6px;
+  font-size: 11px;
   color: var(--text-secondary);
   cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
-.settings-toggle:hover,
-.settings-toggle[aria-expanded="true"] {
+.sidebar-tool:hover {
   background: var(--bg-hover);
   color: var(--text);
+  border-color: var(--border-strong);
 }
 
-.settings-popover {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: calc(100% + 8px);
-  padding: 12px;
-  background: #141414;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  z-index: 30;
-  max-height: min(70vh, 520px);
-  overflow: auto;
+.sidebar-tool span {
+  white-space: nowrap;
 }
 
 .keys-advanced {
@@ -441,7 +502,7 @@ textarea {
   margin-bottom: 8px;
 }
 
-.settings-popover code {
+.modal-body code {
   font-family: var(--mono);
   font-size: 10px;
 }
@@ -473,10 +534,6 @@ textarea {
 
 #repo-github-link a {
   color: var(--accent, #7eb8ff);
-}
-
-.settings-popover[hidden] {
-  display: none;
 }
 
 .field {
@@ -562,34 +619,48 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 11px;
+  font-weight: 500;
   color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   text-transform: capitalize;
 }
 
-.status-dot {
-  width: 7px;
-  height: 7px;
+.status-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
-.status-dot.running,
-.status-dot.executing {
+.status-pill.status-running::before,
+.status-pill.status-executing::before {
   background: var(--blue);
-  box-shadow: 0 0 0 3px rgba(108, 182, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(32, 166, 243, 0.2);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.status-dot.awaiting_approval {
+.status-pill.status-awaiting_approval::before {
   background: var(--amber);
 }
 
-.status-dot.completed {
+.status-pill.status-completed::before {
   background: var(--green);
 }
 
-.status-dot.failed {
+.status-pill.status-failed::before,
+.status-pill.status-cancelled::before {
   background: var(--red);
 }
 
@@ -667,12 +738,29 @@ textarea {
 }
 
 .empty-hints li {
-  font-size: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.empty-hints button {
+  font-size: 12px;
   color: var(--text-secondary);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 5px 12px;
+  padding: 8px 14px;
   background: var(--bg-elevated);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.empty-hints button:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .turn {
@@ -980,6 +1068,91 @@ textarea {
   background: var(--bg-elevated);
 }
 
+/* ——— Modals ——— */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal {
+  width: min(440px, 100%);
+  max-height: min(85vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: #141414;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.modal-wide {
+  width: min(520px, 100%);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.modal-body {
+  padding: 14px 16px 18px;
+  overflow: auto;
+}
+
+.modal-lead {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.modal-body .btn-sm {
+  width: auto;
+}
+
+.modal-body .repo-list {
+  max-height: 220px;
+}
+
 /* ——— Review panel ——— */
 .review-panel {
   display: flex;
@@ -1140,7 +1313,8 @@ textarea {
 }
 
 @media (max-width: 1080px) {
-  .app {
+  .app,
+  .app.review-open {
     grid-template-columns: 240px minmax(0, 1fr);
   }
   .review-panel {
