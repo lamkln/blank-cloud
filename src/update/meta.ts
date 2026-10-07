@@ -42,15 +42,38 @@ export function readLocalCommit(): string {
   return BUILD_INFO.commit || "unknown";
 }
 
-export function canApplyUpdates(): boolean {
-  if (process.env.BLANK_CLOUD_UPDATE_APPLY !== "1") {
-    return false;
-  }
+export function getApplyBlockers(): string[] {
+  const blockers: string[] = [];
   const install = getInstallDir();
-  if (!install) return false;
-  if (!fs.existsSync(path.join(install, "docker-compose.yml"))) return false;
-  if (!fs.existsSync(path.join(install, "scripts", "update.sh"))) return false;
-  return fs.existsSync("/var/run/docker.sock");
+  if (!install) {
+    blockers.push("Set BLANK_CLOUD_INSTALL_DIR to your host clone (e.g. /install with .:/install mounted)");
+    return blockers;
+  }
+  if (!fs.existsSync(path.join(install, "docker-compose.yml"))) {
+    blockers.push("Install directory is missing docker-compose.yml");
+  }
+  if (!fs.existsSync(path.join(install, "scripts", "update.sh"))) {
+    blockers.push("Install directory is missing scripts/update.sh");
+  }
+  if (!fs.existsSync("/var/run/docker.sock")) {
+    blockers.push("Mount /var/run/docker.sock for Docker rebuild/restart");
+  }
+  const flag = process.env.BLANK_CLOUD_UPDATE_APPLY?.trim();
+  const implicitInstall =
+    path.resolve(install) === "/install" &&
+    blockers.length === 0;
+  if (flag === "0") {
+    blockers.push("BLANK_CLOUD_UPDATE_APPLY=0 disables one-click apply");
+  } else if (flag !== "1" && !implicitInstall) {
+    blockers.push(
+      "Set BLANK_CLOUD_UPDATE_APPLY=1 (or use docker-compose.override.yml from the repo)",
+    );
+  }
+  return blockers;
+}
+
+export function canApplyUpdates(): boolean {
+  return getApplyBlockers().length === 0;
 }
 
 export function normalizeSha(sha: string | null | undefined): string {

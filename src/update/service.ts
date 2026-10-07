@@ -11,6 +11,7 @@ import {
   canApplyUpdates,
   commitsMatch,
   DEFAULT_UPDATE_REF,
+  getApplyBlockers,
   getInstallDir,
   readLocalCommit,
 } from "./meta.js";
@@ -44,6 +45,7 @@ export function getUpdateStatus() {
     lastApplyAt: settings.update.lastApplyAt,
     lastError: settings.update.lastError,
     applyAvailable: canApplyUpdates(),
+    applyBlockers: getApplyBlockers(),
     installDir: getInstallDir(),
   };
 }
