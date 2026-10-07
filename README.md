@@ -57,7 +57,7 @@ cd ~/blank-cloud && bash scripts/update.sh
 0 4 * * * BLANK_CLOUD_INSTALL_DIR=$HOME/blank-cloud $HOME/blank-cloud/scripts/auto-update-cron.sh
 ```
 
-**One-click update from the Web UI** mounts your install directory and the Docker socket (trusted home/LAN only):
+**One-click update from the Web UI** mounts your install directory and the Docker socket (trusted home/LAN only). The update script marks the mounted clone as a [safe Git directory](https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory) so root inside the container can run `git fetch` on your host-owned `/install` tree.
 
 ```bash
 cp docker-compose.override.example.yml docker-compose.override.yml
