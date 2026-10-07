@@ -240,7 +240,7 @@ curl -s -X PATCH http://localhost:8787/settings \
 ## Agent workflow
 
 1. **POST /tasks** with a natural-language task.
-2. The agent lists and reads files under `/workspace`, then calls **propose_changes** with full file contents and optional shell commands.
+2. The agent lists and reads files under `/workspace`, may run **run_shell** commands in the project (like Cursor’s terminal — `npm test`, `git status`, `rm` paths inside the repo), then calls **propose_changes** with full file contents and optional shell commands to run on **Accept**.
 3. The task moves to **awaiting_approval**. Stream logs on **GET /tasks/:id/stream** (SSE).
 4. **POST /tasks/:id/approve** writes files, runs approved commands in the container, and streams stdout/stderr.
 5. If a command fails, the agent inspects again and proposes a fix (back to step 3).
@@ -339,7 +339,7 @@ WORKSPACE=./project npm run dev
 
 ## Security notes
 
-- The agent runs shell commands you approve, inside the container, on the mounted project.
+- The agent runs shell commands inside the container on the mounted project: **immediately** via `run_shell` during a task, and **after you Accept** when attached to a proposal. Set `BLANK_CLOUD_AGENT_SHELL=0` in `.env` to disable live shell. Obvious host-wide destructive patterns (e.g. `rm -rf /`) are blocked.
 - Mount only repositories you trust. Path operations are constrained to `/workspace`.
 - Expose port `8787` only on trusted networks; there is no built-in auth.
 

@@ -13,6 +13,8 @@ import { appendTaskMessage, emit, getTask, updateTask } from "./store.js";
 import type { TaskRecord } from "./types.js";
 import { getRuntimeSettings } from "../config.js";
 import { formatAgentError } from "../agent/errors.js";
+import { runShellCommand } from "./runner.js";
+import { agentShellEnabled, assertShellCommandAllowed } from "./shell-policy.js";
 
 const SYSTEM = `You are blank-cloud, a self-hosted coding agent similar to Cursor Cloud Agent.
 You operate inside a Linux container on the user's git workspace (cloned remote or mounted repo).
@@ -20,12 +22,13 @@ You operate inside a Linux container on the user's git workspace (cloned remote 
 Behavior:
 - Explore the codebase with list_directory and read_file before editing.
 - After each tool call, write a short update to the user in plain language (they only see chat, not raw tool JSON).
+- Use run_shell to run terminal commands inside the repo (npm test, git status, rm paths under the project, etc.). Output appears in the chat terminal. Stay inside the workspace.
 - When ready to modify files, call propose_changes with FULL file contents for each changed file (paths relative to workspace root).
-- Optional: include shell commands to run after the user approves (tests, lint, build).
+- You may also attach shell commands to propose_changes; those run only after the user clicks Accept (good for long test suites).
 - After calling propose_changes, STOP and wait. The user must approve or reject in the UI.
 - If the user rejects or sends follow-up messages, revise your approach.
 
-Prefer minimal, correct changes. Do not run shell commands yourself except via proposed commands after approval.`;
+Prefer minimal, correct changes. Use run_shell for immediate commands; use propose_changes commands for steps that should run together after a file diff is accepted.`;
 
 const AGENT_TURN_TIMEOUT_MS = Number(process.env.BLANK_CLOUD_AGENT_TIMEOUT_MS) || 15 * 60 * 1000;
 
@@ -50,7 +53,7 @@ function emitStepProgress(taskId: string, step: number): void {
 }
 
 function buildTools(taskId: string) {
-  return {
+  const base = {
     list_directory: tool({
       description: "List entries in a directory relative to the workspace root",
       parameters: z.object({
@@ -126,6 +129,39 @@ function buildTools(taskId: string) {
         return {
           status: "awaiting_approval",
           message: "Waiting for user approval in the UI.",
+        };
+      },
+    }),
+  };
+
+  if (!agentShellEnabled()) {
+    return base;
+  }
+
+  return {
+    ...base,
+    run_shell: tool({
+      description:
+        "Run one shell command in the project root (workspace). Use for git, npm, rm, mkdir, etc. inside the repo. Streams stdout/stderr to the user.",
+      parameters: z.object({
+        command: z.string().describe("Single shell command, run with bash -lc in the workspace"),
+        reason: z.string().optional().describe("Short note shown in the UI"),
+      }),
+      execute: async ({ command, reason }) => {
+        try {
+          assertShellCommandAllowed(command);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return { error: msg };
+        }
+        const label = reason?.trim() || command.trim();
+        emit(taskId, "tool", `Shell: ${label}`, { tool: "run_shell", command });
+        const result = await runShellCommand(taskId, command);
+        return {
+          exitCode: result.exitCode,
+          signal: result.signal,
+          timedOut: result.timedOut,
+          ok: result.exitCode === 0 && !result.timedOut,
         };
       },
     }),
