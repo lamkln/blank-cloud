@@ -49,7 +49,7 @@ app.get("/health", (c) =>
     ok: true,
     version: appVersion.version ?? "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "update-git-safe",
+    ui: "ui-categories",
     workspace: getWorkspaceRoot(),
   }),
 );

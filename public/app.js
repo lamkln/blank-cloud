@@ -174,6 +174,18 @@ function addTurn(role, text) {
   scrollThread();
 }
 
+const TOOL_CATEGORY = {
+  list_directory: { label: "Explore", className: "tool-cat-explore" },
+  read_file: { label: "Explore", className: "tool-cat-explore" },
+  propose_changes: { label: "Changes", className: "tool-cat-changes" },
+  run_shell: { label: "Terminal", className: "tool-cat-shell" },
+};
+
+function toolCategoryMeta(data) {
+  const id = data?.tool;
+  return TOOL_CATEGORY[id] ?? { label: "Tool", className: "tool-cat-other" };
+}
+
 function humanizeToolMessage(msg, data) {
   const text = String(msg ?? "");
   if (text === "Listed ." || data?.path === ".") {
@@ -187,10 +199,11 @@ function humanizeToolMessage(msg, data) {
 
 function addToolRow(text, data) {
   $("empty-state").hidden = true;
+  const cat = toolCategoryMeta(data);
   const row = document.createElement("div");
-  row.className = "tool-row";
-  row.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="1.2" opacity=".5"/></svg><span></span>`;
-  row.querySelector("span").textContent = humanizeToolMessage(text, data);
+  row.className = `tool-row ${cat.className}`;
+  row.innerHTML = `<span class="tool-cat-badge">${escapeHtml(cat.label)}</span><span class="tool-cat-msg"></span>`;
+  row.querySelector(".tool-cat-msg").textContent = humanizeToolMessage(text, data);
   $("chat-thread").appendChild(row);
   scrollThread();
 }
@@ -219,20 +232,42 @@ function appendTerminal(line) {
   scrollThread();
 }
 
-const EMPTY_HTML = `<p class="empty-title">What should we build?</p>
-<p class="empty-body">Connect a git remote in the sidebar (or mount a folder via docker-compose), then describe the task. Approve changes before they land in the repo.</p>
-<ul class="empty-hints"><li>Fix a failing test</li><li>Add an API endpoint</li><li>Refactor a module</li></ul>`;
-
 function clearChat() {
-  $("chat-thread").innerHTML = "";
-  const empty = document.createElement("div");
-  empty.className = "empty-state";
-  empty.id = "empty-state";
-  empty.innerHTML = EMPTY_HTML;
-  $("chat-thread").appendChild(empty);
+  const thread = $("chat-thread");
+  for (const child of [...thread.children]) {
+    if (child.id !== "empty-state") child.remove();
+  }
+  const empty = $("empty-state");
+  if (empty) empty.hidden = false;
   state.terminalBody = null;
   state.seenEventIds.clear();
   clearActiveStream();
+  updateEmptyState();
+}
+
+function wireEmptyHints() {
+  const root = $("empty-hints");
+  if (!root || root.dataset.wired) return;
+  root.dataset.wired = "1";
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-prompt]");
+    if (!btn) return;
+    $("composer-input").value = btn.dataset.prompt || "";
+    resizeComposer();
+    $("composer-input").focus();
+  });
+}
+
+function chatHistoryGroup(updatedAt) {
+  const d = new Date(updatedAt);
+  if (Number.isNaN(d.getTime())) return "Earlier";
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startYesterday = new Date(startToday);
+  startYesterday.setDate(startYesterday.getDate() - 1);
+  if (d >= startToday) return "Today";
+  if (d >= startYesterday) return "Yesterday";
+  return "Earlier";
 }
 
 function ingestEvent(ev) {
@@ -371,6 +406,12 @@ function renderChanges(task) {
   $("change-summary").textContent = p.summary;
   const filesEl = $("change-files");
   filesEl.innerHTML = "";
+  if (p.files?.length) {
+    const label = document.createElement("div");
+    label.className = "review-subsection-label";
+    label.textContent = `Files (${p.files.length})`;
+    filesEl.appendChild(label);
+  }
   for (const f of p.files) {
     const card = document.createElement("div");
     card.className = "file-card";
@@ -389,7 +430,7 @@ function renderChanges(task) {
   }
   const cmdEl = $("change-commands");
   if (p.commands?.length) {
-    cmdEl.innerHTML = "<span>Runs after accept</span><ul></ul>";
+    cmdEl.innerHTML = '<div class="review-subsection-label">Commands after accept</div><ul></ul>';
     const ul = cmdEl.querySelector("ul");
     for (const c of p.commands) {
       const li = document.createElement("li");
@@ -443,18 +484,32 @@ async function loadRuns() {
   const list = $("run-list");
   list.innerHTML = "";
   if (!data.tasks.length) {
-    list.innerHTML = `<li class="system-note" style="text-align:left;padding:8px">No runs yet</li>`;
+    list.innerHTML = `<li class="run-list-empty">No chats yet — start with New Chat</li>`;
     return;
   }
+  const order = ["Today", "Yesterday", "Earlier"];
+  const buckets = new Map(order.map((g) => [g, []]));
   for (const run of data.tasks) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `run-item${run.id === state.taskId ? " active" : ""}`;
-    btn.innerHTML = `<div class="run-item-title">${escapeHtml(run.title)}</div><div class="run-item-meta">${escapeHtml((STATUS_LABEL[run.status] ?? run.status).toLowerCase())}</div>`;
-    btn.addEventListener("click", () => void openRun(run.id));
-    li.appendChild(btn);
-    list.appendChild(li);
+    const g = chatHistoryGroup(run.updatedAt);
+    buckets.get(g)?.push(run);
+  }
+  for (const group of order) {
+    const runs = buckets.get(group) ?? [];
+    if (!runs.length) continue;
+    const head = document.createElement("li");
+    head.className = "run-list-group-label";
+    head.textContent = group;
+    list.appendChild(head);
+    for (const run of runs) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `run-item${run.id === state.taskId ? " active" : ""}`;
+      btn.innerHTML = `<div class="run-item-title">${escapeHtml(run.title)}</div><div class="run-item-meta">${escapeHtml((STATUS_LABEL[run.status] ?? run.status).toLowerCase())}</div>`;
+      btn.addEventListener("click", () => void openRun(run.id));
+      li.appendChild(btn);
+      list.appendChild(li);
+    }
   }
 }
 
@@ -1031,5 +1086,6 @@ void loadRepo().then(() => {
 });
 void loadSettings();
 void loadUpdateStatus();
+wireEmptyHints();
 void loadRuns();
 setStatus("idle");

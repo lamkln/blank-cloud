@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="icon" type="image/png" sizes="32x32" href="/ui/favicon-32.png" />
     <link rel="apple-touch-icon" href="/ui/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/ui/styles.css?v=0.4.0" />
+    <link rel="stylesheet" href="/ui/styles.css?v=0.4.2" />
   </head>
   <body class="owui">
     <div class="app">
@@ -27,45 +27,53 @@
         </div>
 
         <div class="sidebar-section">
+          <div class="section-label">Chat</div>
           <button type="button" class="btn-new-chat" id="new-run">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
             </svg>
             New Chat
           </button>
-          <div class="repo-actions">
-            <button type="button" class="btn btn-sm btn-primary" id="repo-connect-github">Connect GitHub</button>
-            <button type="button" class="btn btn-sm" id="repo-logout" hidden>Sign out</button>
+        </div>
+
+        <div class="sidebar-section sidebar-group">
+          <div class="section-label">Workspace</div>
+          <div class="sidebar-group-body">
+            <div class="repo-actions">
+              <button type="button" class="btn btn-sm btn-primary" id="repo-connect-github">Connect GitHub</button>
+              <button type="button" class="btn btn-sm" id="repo-logout" hidden>Sign out</button>
+            </div>
+            <div id="github-device-panel" class="github-device-panel" hidden>
+              <p class="github-device-title">GitHub sign-in code</p>
+              <p class="github-device-code" id="github-device-code">----</p>
+              <button type="button" class="btn btn-sm" id="github-device-copy">Copy code</button>
+              <a class="btn btn-sm btn-primary" id="github-device-open" href="https://github.com/login/device" target="_blank" rel="noopener">Open GitHub</a>
+              <p class="fine-print">Paste the code on GitHub, approve, then leave this tab open — we detect it automatically.</p>
+            </div>
+            <div id="repo-picker" hidden>
+              <label class="field field-compact">
+                <span>Repository</span>
+                <input
+                  id="repo-search"
+                  type="search"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="Search…"
+                />
+              </label>
+              <ul class="repo-list" id="repo-list"></ul>
+            </div>
+            <p class="fine-print repo-status" id="repo-status" hidden></p>
           </div>
-          <div id="github-device-panel" class="github-device-panel" hidden>
-            <p class="github-device-title">GitHub sign-in code</p>
-            <p class="github-device-code" id="github-device-code">----</p>
-            <button type="button" class="btn btn-sm" id="github-device-copy">Copy code</button>
-            <a class="btn btn-sm btn-primary" id="github-device-open" href="https://github.com/login/device" target="_blank" rel="noopener">Open GitHub</a>
-            <p class="fine-print">Paste the code on GitHub, approve, then leave this tab open — we detect it automatically.</p>
-          </div>
-          <div id="repo-picker" hidden>
-            <label class="field field-compact">
-              <span>Your repositories</span>
-              <input
-                id="repo-search"
-                type="search"
-                spellcheck="false"
-                autocomplete="off"
-                placeholder="Search…"
-              />
-            </label>
-            <ul class="repo-list" id="repo-list"></ul>
-          </div>
-          <p class="fine-print repo-status" id="repo-status" hidden></p>
         </div>
 
         <div class="sidebar-section grow">
-          <div class="section-label">Chats</div>
+          <div class="section-label">History</div>
           <ul class="run-list" id="run-list"></ul>
         </div>
 
         <div class="sidebar-footer">
+          <div class="section-label">System</div>
           <button type="button" class="settings-toggle" id="settings-toggle" aria-expanded="false">
             <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
               <path
@@ -76,52 +84,64 @@
             Model
           </button>
           <div class="settings-popover" id="settings-popover" hidden>
-            <label class="field">
-              <span>Provider</span>
-              <select id="provider"></select>
-            </label>
-            <label class="field">
-              <span>Model</span>
-              <input id="model" type="text" spellcheck="false" autocomplete="off" />
-            </label>
-            <label class="field" id="custom-url-wrap" hidden>
-              <span id="base-url-label">Base URL</span>
-              <input id="custom-base-url" type="url" spellcheck="false" autocomplete="off" />
-            </label>
-            <label class="field">
-              <span id="api-key-label">API key</span>
-              <input
-                id="api-key"
-                type="password"
-                spellcheck="false"
-                autocomplete="off"
-                placeholder="Paste key to save or replace"
-              />
-            </label>
-            <p class="fine-print" id="key-hint"></p>
-            <p class="fine-print nim-help" id="nim-help" hidden>
-              NVIDIA cloud API often returns <strong>HTTP 410</strong> on chat if your
-              build.nvidia.com org lacks <em>Public API Endpoints</em> (listing models may still work).
-              Contact <a href="mailto:help@build.nvidia.com">help@build.nvidia.com</a> or point the base URL at
-              self-hosted NIM (<code>http://HOST:8000/v1</code>). Save, then use Test connection.
-            </p>
-            <details class="keys-advanced">
-              <summary>All provider keys</summary>
+            <div class="settings-group">
+              <div class="settings-group-title">Model</div>
+              <label class="field">
+                <span>Provider</span>
+                <select id="provider"></select>
+              </label>
+              <label class="field">
+                <span>Model ID</span>
+                <input id="model" type="text" spellcheck="false" autocomplete="off" />
+              </label>
+              <label class="field" id="custom-url-wrap" hidden>
+                <span id="base-url-label">Base URL</span>
+                <input id="custom-base-url" type="url" spellcheck="false" autocomplete="off" />
+              </label>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-title">Credentials</div>
+              <label class="field">
+                <span id="api-key-label">API key (active provider)</span>
+                <input
+                  id="api-key"
+                  type="password"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="Paste key to save or replace"
+                />
+              </label>
+              <p class="fine-print" id="key-hint"></p>
+              <p class="fine-print nim-help" id="nim-help" hidden>
+                NVIDIA cloud API often returns <strong>HTTP 410</strong> on chat if your
+                build.nvidia.com org lacks <em>Public API Endpoints</em> (listing models may still work).
+                Contact <a href="mailto:help@build.nvidia.com">help@build.nvidia.com</a> or point the base URL at
+                self-hosted NIM (<code>http://HOST:8000/v1</code>). Save, then use Test connection.
+              </p>
+            </div>
+            <details class="keys-advanced settings-group">
+              <summary class="settings-group-title">More provider keys</summary>
+              <p class="settings-subheading">Major</p>
               <label class="field"><span>OpenAI</span><input data-key="openai" type="password" autocomplete="off" /></label>
               <label class="field"><span>Anthropic</span><input data-key="anthropic" type="password" autocomplete="off" /></label>
               <label class="field"><span>Gemini</span><input data-key="gemini" type="password" autocomplete="off" /></label>
+              <p class="settings-subheading">Fast &amp; routers</p>
               <label class="field"><span>Groq</span><input data-key="groq" type="password" autocomplete="off" /></label>
               <label class="field"><span>OpenRouter</span><input data-key="openrouter" type="password" autocomplete="off" /></label>
+              <p class="settings-subheading">Self-hosted</p>
               <label class="field"><span>NVIDIA NIM</span><input data-key="nim" type="password" autocomplete="off" /></label>
-              <label class="field"><span>Custom key</span><input data-key="customApiKey" type="password" autocomplete="off" /></label>
+              <label class="field"><span>Custom OpenAI-compatible</span><input data-key="customApiKey" type="password" autocomplete="off" /></label>
             </details>
-            <div class="settings-actions">
-              <button type="button" class="btn btn-sm" id="save-settings">Save settings</button>
-              <button type="button" class="btn btn-sm" id="test-settings">Test connection</button>
-              <button type="button" class="btn btn-sm" id="load-nim-models" hidden>Load NIM models</button>
+            <div class="settings-group">
+              <div class="settings-group-title">Actions</div>
+              <div class="settings-actions">
+                <button type="button" class="btn btn-sm btn-primary" id="save-settings">Save</button>
+                <button type="button" class="btn btn-sm" id="test-settings">Test connection</button>
+                <button type="button" class="btn btn-sm" id="load-nim-models" hidden>Load NIM models</button>
+              </div>
+              <p class="fine-print settings-status" id="settings-status" hidden></p>
             </div>
-            <p class="fine-print settings-status" id="settings-status" hidden></p>
-            <p class="fine-print">Stored in <code>/app/data/settings.json</code> on the host (<code>./data</code> by default).</p>
+            <p class="fine-print settings-foot">Stored in <code>/app/data/settings.json</code> on the host (<code>./data</code>).</p>
           </div>
           <div class="update-panel" id="update-panel" hidden>
             <button type="button" class="btn btn-sm btn-primary" id="update-apply">Update now</button>
@@ -146,14 +166,32 @@
             <div class="empty-state" id="empty-state">
               <p class="empty-title">What should we build?</p>
               <p class="empty-body">
-                Connect GitHub in the sidebar, pick a repository, then describe what to change.
-                The agent proposes edits; you approve before files or git push run.
+                Under <strong>Workspace</strong>, connect GitHub and pick a repo. Under <strong>System → Model</strong>, choose your LLM.
+                The agent proposes edits; you approve before they land in the repo.
               </p>
-              <ul class="empty-hints">
-                <li>Fix a failing test</li>
-                <li>Add an API endpoint</li>
-                <li>Refactor a module</li>
-              </ul>
+              <div class="empty-categories" id="empty-hints">
+                <div class="prompt-category">
+                  <div class="prompt-category-label">Fix &amp; test</div>
+                  <ul class="empty-hints">
+                    <li><button type="button" data-prompt="Find and fix a failing test in this repo">Fix a failing test</button></li>
+                    <li><button type="button" data-prompt="Run the test suite and fix any errors">Run tests and fix errors</button></li>
+                  </ul>
+                </div>
+                <div class="prompt-category">
+                  <div class="prompt-category-label">Build</div>
+                  <ul class="empty-hints">
+                    <li><button type="button" data-prompt="Add a small API endpoint with tests">Add an API endpoint</button></li>
+                    <li><button type="button" data-prompt="Add a CLI flag or config option with docs">Add a feature</button></li>
+                  </ul>
+                </div>
+                <div class="prompt-category">
+                  <div class="prompt-category-label">Improve</div>
+                  <ul class="empty-hints">
+                    <li><button type="button" data-prompt="Refactor the messiest module for clarity">Refactor a module</button></li>
+                    <li><button type="button" data-prompt="Improve error messages and logging in one area">Better errors &amp; logs</button></li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -196,6 +234,6 @@
       </aside>
     </div>
     <script src="/ui/markdown.js?v=0.4.0"></script>
-    <script src="/ui/app.js?v=0.4.1" type="module"></script>
+    <script src="/ui/app.js?v=0.4.2" type="module"></script>
   </body>
 </html>
