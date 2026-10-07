@@ -957,7 +957,7 @@ function syncProviderFields() {
   $("api-key-label").textContent = API_KEY_LABELS[provider] ?? "API key";
   const modelInput = $("model");
   if (provider === "custom") {
-    modelInput.placeholder = "e.g. llama3.2, gpt-4o, my-endpoint-model";
+    modelInput.placeholder = "e.g. auto (Manifest), llama3.2, your-gateway-model-id";
     modelInput.removeAttribute("readonly");
   } else {
     modelInput.placeholder = metaDefaultPlaceholder(provider);
@@ -1031,11 +1031,14 @@ function providerKeyField(provider) {
 async function saveSettings() {
   const provider = $("provider").value;
   let model = $("model").value.trim();
-  if (!model) {
+  if (!model && provider !== "custom") {
     model = settingsSnapshot?.providers?.find((p) => p.id === provider)?.defaultModel ?? "";
   }
   if (provider === "custom" && !model) {
-    setSettingsStatus("Custom provider needs a model ID (exact name your API expects).", "err");
+    setSettingsStatus(
+      "Custom provider needs a model ID (e.g. Manifest routing: auto).",
+      "err",
+    );
     return;
   }
   const payload = {
@@ -1055,8 +1058,12 @@ async function saveSettings() {
 
   await api("/settings", { method: "PATCH", body: JSON.stringify(payload) });
   await loadSettings();
-  setSettingsStatus("Settings saved.", "ok");
-  addSystemNote(`Active provider: ${settingsSnapshot?.provider ?? provider}`);
+  const activeModel = (settingsSnapshot?.model ?? model).trim();
+  setSettingsStatus(
+    `Saved — using ${settingsSnapshot?.provider ?? provider} / ${activeModel || "(no model)"}`,
+    "ok",
+  );
+  addSystemNote(`LLM: ${settingsSnapshot?.provider ?? provider} · ${activeModel}`);
 }
 
 async function testSettingsConnection() {

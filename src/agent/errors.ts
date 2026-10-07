@@ -8,6 +8,18 @@ export const NIM_HTTP_410_MESSAGE =
   '"Public API Endpoints" — email help@build.nvidia.com with your login email and API key prefix, or use ' +
   "self-hosted NIM on your LAN (base URL like http://HOST:8000/v1). In Settings: Save, Load NIM models, Test connection.";
 
+function withConfiguredModel(message: string): string {
+  try {
+    const { provider, model } = getRuntimeSettings();
+    if (model) {
+      return `${message} Configured in blank-cloud: ${provider} / ${model}.`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return message;
+}
+
 function resolveProvider(context?: { provider?: LlmProvider }): LlmProvider {
   if (context?.provider) return context.provider;
   try {
@@ -93,7 +105,15 @@ export function formatAgentError(
   }
 
   if (statusCode === 404 || /not found/i.test(detail)) {
-    return `Model or endpoint not found — verify the model name and base URL in Settings. (${detail})`;
+    return withConfiguredModel(
+      `Model or endpoint not found — verify the model name and base URL in Settings. (${detail})`,
+    );
+  }
+
+  if (/M302|not available for this agent|model.*not available/i.test(detail)) {
+    return withConfiguredModel(
+      `${detail} If you use Manifest or another gateway, set Provider to custom, Base URL, API key, and the exact model id (e.g. auto) in Settings → Save → Test connection.`,
+    );
   }
 
   if (statusCode === 410 || detail.toLowerCase() === "gone") {
