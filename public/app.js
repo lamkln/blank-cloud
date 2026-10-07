@@ -128,17 +128,11 @@ function clearActiveStream() {
 
 function turnInnerHtml(role) {
   const isUser = role === "user";
-  const avatar = isUser ? "You" : "AI";
-  const avatarClass = isUser ? "turn-avatar user" : "turn-avatar agent";
-  if (isUser) {
-    return `<div class="turn-row">
-      <div class="turn-bubble user-bubble"><div class="turn-body"></div></div>
-      <div class="${avatarClass}" aria-hidden="true">${avatar}</div>
-    </div>`;
-  }
-  return `<div class="turn-row">
-    <div class="${avatarClass}" aria-hidden="true">${avatar}</div>
-    <div class="turn-bubble agent-bubble"><div class="turn-body"></div></div>
+  const label = isUser ? "You" : "Agent";
+  const roleClass = isUser ? "turn-user" : "turn-agent";
+  return `<div class="turn-row ${roleClass}">
+    <div class="turn-rail"><span class="turn-role">${label}</span></div>
+    <div class="turn-bubble ${isUser ? "user-bubble" : "agent-bubble"}"><div class="turn-body"></div></div>
   </div>`;
 }
 
