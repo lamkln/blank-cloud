@@ -19,13 +19,19 @@ You operate inside a Linux container on the user's git workspace (cloned remote 
 
 Behavior:
 - Explore the codebase with list_directory and read_file before editing.
-- Explain your plan briefly in natural language as you work (the user sees a chat UI).
+- After each tool call, write a short update to the user in plain language (they only see chat, not raw tool JSON).
 - When ready to modify files, call propose_changes with FULL file contents for each changed file (paths relative to workspace root).
 - Optional: include shell commands to run after the user approves (tests, lint, build).
 - After calling propose_changes, STOP and wait. The user must approve or reject in the UI.
 - If the user rejects or sends follow-up messages, revise your approach.
 
 Prefer minimal, correct changes. Do not run shell commands yourself except via proposed commands after approval.`;
+
+const AGENT_TURN_TIMEOUT_MS = Number(process.env.BLANK_CLOUD_AGENT_TIMEOUT_MS) || 15 * 60 * 1000;
+
+function agentStreamingEnabled(): boolean {
+  return process.env.BLANK_CLOUD_AGENT_STREAM === "1";
+}
 
 function modelMessages(task: TaskRecord) {
   return task.messages.map((m) => ({ role: m.role, content: m.content }));
@@ -35,6 +41,12 @@ function displayPath(rel: string): string {
   const p = rel.trim() || ".";
   if (p === "." || p === "./") return "project root";
   return p;
+}
+
+function emitStepProgress(taskId: string, step: number): void {
+  const message =
+    step <= 1 ? "Exploring repository…" : step === 2 ? "Reading files…" : "Still working…";
+  emit(taskId, "status", message, { status: "running", step });
 }
 
 function buildTools(taskId: string) {
@@ -135,12 +147,32 @@ async function finishAgentTurn(taskId: string): Promise<void> {
   }
 
   updateTask(taskId, { status: "completed" });
+  emit(taskId, "status", "Done", { status: "completed" });
   emit(taskId, "done", "Run finished", { status: "completed" });
+}
+
+function withAgentTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Agent timed out after ${Math.round(AGENT_TURN_TIMEOUT_MS / 60000)} minutes`));
+    }, AGENT_TURN_TIMEOUT_MS);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
 }
 
 async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void> {
   let streamId = randomUUID();
   let segmentText = "";
+  let step = 0;
 
   const result = streamText({
     model: createLanguageModel(),
@@ -162,6 +194,8 @@ async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void>
       );
     },
     onStepFinish: () => {
+      step += 1;
+      emitStepProgress(taskId, step);
       const trimmed = segmentText.trim();
       if (trimmed) {
         appendTaskMessage(taskId, "assistant", trimmed, true);
@@ -171,18 +205,25 @@ async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void>
     },
   });
 
-  await result.text;
+  await withAgentTimeout(result.text);
   await finishAgentTurn(taskId);
 }
 
 async function runBatchTurn(taskId: string, task: TaskRecord): Promise<void> {
-  const result = await generateText({
-    model: createLanguageModel(),
-    system: SYSTEM,
-    messages: modelMessages(task),
-    maxSteps: 16,
-    tools: buildTools(taskId),
-  });
+  let step = 0;
+  const result = await withAgentTimeout(
+    generateText({
+      model: createLanguageModel(),
+      system: SYSTEM,
+      messages: modelMessages(task),
+      maxSteps: 16,
+      tools: buildTools(taskId),
+      onStepFinish: () => {
+        step += 1;
+        emitStepProgress(taskId, step);
+      },
+    }),
+  );
 
   const refreshed = getTask(taskId);
   if (refreshed?.pendingProposal) {
@@ -215,24 +256,29 @@ export async function runAgentTurn(taskId: string): Promise<void> {
   emit(taskId, "status", "Agent working…", { status: "running", iteration: task.iteration + 1 });
 
   try {
-    try {
-      await runStreamingTurn(taskId, getTask(taskId)!);
-    } catch (streamErr) {
-      rollbackMessagesSince(taskId, messageCountAtStart);
-      emit(
-        taskId,
-        "log",
-        "Streaming mode failed for this provider — retrying in standard mode.",
-      );
-      const refreshed = getTask(taskId);
-      if (!refreshed) {
-        throw streamErr;
+    if (agentStreamingEnabled()) {
+      try {
+        await runStreamingTurn(taskId, getTask(taskId)!);
+      } catch (streamErr) {
+        rollbackMessagesSince(taskId, messageCountAtStart);
+        emit(
+          taskId,
+          "log",
+          "Streaming mode failed for this provider — retrying in standard mode.",
+        );
+        const refreshed = getTask(taskId);
+        if (!refreshed) {
+          throw streamErr;
+        }
+        await runBatchTurn(taskId, refreshed);
       }
-      await runBatchTurn(taskId, refreshed);
+    } else {
+      await runBatchTurn(taskId, getTask(taskId)!);
     }
   } catch (err) {
     const message = formatAgentError(err, { provider: getRuntimeSettings().provider });
     updateTask(taskId, { status: "failed", lastError: message });
+    emit(taskId, "status", "Failed", { status: "failed" });
     emit(taskId, "error", message, { status: "failed" });
   }
 }

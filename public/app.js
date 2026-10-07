@@ -274,14 +274,24 @@ function ingestEvent(ev) {
   }
   if (type === "done") {
     addSystemNote(msg);
+    if (ev.data?.status) setStatus(ev.data.status);
+    else setStatus("completed");
+    stopPoll();
+    void refreshTask();
     return;
   }
   if (type === "rejected") {
     addSystemNote(msg ? `Rejected — ${msg}` : "Changes rejected");
     return;
   }
-  if (type === "status" && ev.data?.status) {
-    setStatus(ev.data.status);
+  if (type === "status") {
+    if (ev.data?.status) {
+      setStatus(ev.data.status);
+      if (ev.data.status === "running" && msg) {
+        $("status-label").textContent = msg;
+      }
+    }
+    return;
   }
   if (type === "awaiting_approval" || type === "proposal") {
     void refreshTask();
