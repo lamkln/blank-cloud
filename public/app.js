@@ -96,8 +96,50 @@ function escapeHtml(s) {
 
 function setStatus(status) {
   state.status = status;
-  $("status-dot").className = `status-dot ${status}`;
-  $("status-label").textContent = STATUS_LABEL[status] ?? status.replace(/_/g, " ");
+  const pill = $("status-label");
+  if (pill) {
+    pill.className = `status-pill status-${status}`;
+    pill.textContent = STATUS_LABEL[status] ?? status.replace(/_/g, " ");
+  }
+}
+
+function setReviewOpen(open) {
+  $("app-root")?.classList.toggle("review-open", Boolean(open));
+}
+
+function openModal(backdropId) {
+  const el = $(backdropId);
+  if (el) el.hidden = false;
+}
+
+function closeModal(backdropId) {
+  const el = $(backdropId);
+  if (el) el.hidden = true;
+}
+
+function bindModal(backdropId, closeId, onOpen) {
+  const backdrop = $(backdropId);
+  const closeBtn = $(closeId);
+  if (!backdrop) return;
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) closeModal(backdropId);
+  });
+  const dialog = backdrop.querySelector(".modal");
+  dialog?.addEventListener("click", (e) => e.stopPropagation());
+  closeBtn?.addEventListener("click", () => closeModal(backdropId));
+  return backdrop;
+}
+
+function updateSidebarModel() {
+  const el = $("sidebar-model");
+  if (!el || !settingsSnapshot) return;
+  const provider = settingsSnapshot.provider || "";
+  const model = (settingsSnapshot.model || "").trim();
+  if (!model) {
+    el.textContent = "Not configured";
+    return;
+  }
+  el.textContent = provider ? `${provider} · ${model}` : model;
 }
 
 function updateEmptyState() {
@@ -219,20 +261,40 @@ function appendTerminal(line) {
   scrollThread();
 }
 
-const EMPTY_HTML = `<p class="empty-title">What should we build?</p>
-<p class="empty-body">Connect a git remote in the sidebar (or mount a folder via docker-compose), then describe the task. Approve changes before they land in the repo.</p>
-<ul class="empty-hints"><li>Fix a failing test</li><li>Add an API endpoint</li><li>Refactor a module</li></ul>`;
-
 function clearChat() {
-  $("chat-thread").innerHTML = "";
-  const empty = document.createElement("div");
-  empty.className = "empty-state";
-  empty.id = "empty-state";
-  empty.innerHTML = EMPTY_HTML;
-  $("chat-thread").appendChild(empty);
+  const thread = $("chat-thread");
+  for (const child of [...thread.children]) {
+    if (child.id !== "empty-state") child.remove();
+  }
+  let empty = $("empty-state");
+  if (!empty) {
+    empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.id = "empty-state";
+    empty.innerHTML = `<p class="empty-title">How can I help you today?</p>
+<p class="empty-body">Pick a repo under <strong>Workspace</strong>, choose a <strong>Model</strong>, then chat.</p>
+<ul class="empty-hints" id="empty-hints"></ul>`;
+    thread.appendChild(empty);
+    wireEmptyHints();
+  }
+  empty.hidden = false;
   state.terminalBody = null;
   state.seenEventIds.clear();
   clearActiveStream();
+  updateEmptyState();
+}
+
+function wireEmptyHints() {
+  const root = $("empty-hints");
+  if (!root || root.dataset.wired) return;
+  root.dataset.wired = "1";
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-prompt]");
+    if (!btn) return;
+    $("composer-input").value = btn.dataset.prompt || "";
+    resizeComposer();
+    $("composer-input").focus();
+  });
 }
 
 function ingestEvent(ev) {
@@ -365,9 +427,11 @@ function renderChanges(task) {
   const p = task.pendingProposal;
   if (!p || task.status !== "awaiting_approval") {
     panel.hidden = true;
+    setReviewOpen(false);
     return;
   }
   panel.hidden = false;
+  setReviewOpen(true);
   $("change-summary").textContent = p.summary;
   const filesEl = $("change-files");
   filesEl.innerHTML = "";
@@ -406,7 +470,7 @@ async function refreshTask() {
   try {
     const task = await api(`/tasks/${state.taskId}`);
     setStatus(task.status);
-    $("run-title").textContent = task.title || "Agent";
+    $("run-title").textContent = task.title || "New Chat";
     $("run-meta").textContent =
       task.status === "failed" && task.lastError
         ? task.lastError
@@ -484,9 +548,10 @@ function newRun() {
   closeStream();
   stopPoll();
   setStatus("idle");
-  $("run-title").textContent = "New agent";
+  $("run-title").textContent = "New Chat";
   $("run-meta").textContent = "";
   $("changes-panel").hidden = true;
+  setReviewOpen(false);
   $("composer-input").focus();
   void loadRuns();
 }
@@ -788,7 +853,7 @@ async function startGitHubDeviceSignIn() {
     panel.hidden = false;
     codeEl.textContent = code;
     openEl.href = uri;
-    addSystemNote(`GitHub code: ${code} — use Open GitHub in the sidebar or ${uri}`);
+    addSystemNote(`GitHub code: ${code} — open Workspace → Open GitHub or ${uri}`);
     window.open(uri, "_blank", "noopener");
     const intervalMs = (start.interval || 5) * 1000;
     let pending = true;
@@ -891,6 +956,7 @@ async function loadSettings() {
   $("custom-base-url").value = data.customBaseUrl || "";
   syncProviderFields();
   refreshKeyHint();
+  updateSidebarModel();
   $("api-key").value = "";
   for (const input of document.querySelectorAll("[data-key]")) {
     input.value = "";
@@ -998,12 +1064,19 @@ $("provider").addEventListener("change", () => {
   setSettingsStatus("", null);
 });
 
-$("settings-toggle").addEventListener("click", () => {
-  const pop = $("settings-popover");
-  const open = pop.hidden;
-  if (open) void loadSettings();
-  pop.hidden = !open;
-  $("settings-toggle").setAttribute("aria-expanded", String(open));
+function openSettingsModal() {
+  void loadSettings().then(() => openModal("settings-modal"));
+}
+
+$("settings-toggle").addEventListener("click", openSettingsModal);
+$("settings-open")?.addEventListener("click", openSettingsModal);
+
+bindModal("workspace-modal", "workspace-close");
+bindModal("settings-modal", "settings-close");
+
+$("workspace-open")?.addEventListener("click", () => {
+  void loadRepo();
+  openModal("workspace-modal");
 });
 
 $("composer-input").addEventListener("input", resizeComposer);
@@ -1014,13 +1087,13 @@ $("composer-input").addEventListener("keydown", (e) => {
   }
 });
 
-document.addEventListener("click", (e) => {
-  const pop = $("settings-popover");
-  if (pop.hidden) return;
-  if (e.target.closest("#settings-popover") || e.target.closest("#settings-toggle")) return;
-  pop.hidden = true;
-  $("settings-toggle").setAttribute("aria-expanded", "false");
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  closeModal("workspace-modal");
+  closeModal("settings-modal");
 });
+
+wireEmptyHints();
 
 void loadHealth();
 void loadRepo().then(() => {
