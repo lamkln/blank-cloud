@@ -579,11 +579,6 @@ async function undoApply() {
 
 let updateSnapshot = null;
 
-function shortSha(sha) {
-  if (!sha || sha === "unknown") return "—";
-  return sha.slice(0, 7);
-}
-
 function renderUpdatePanel(data) {
   updateSnapshot = data;
   const panel = $("update-panel");
@@ -592,46 +587,34 @@ function renderUpdatePanel(data) {
   if (!show) {
     return;
   }
-  $("update-version").textContent = data.remoteCommit
-    ? shortSha(data.remoteCommit)
-    : shortSha(data.localCommit);
-  const statusEl = $("update-status");
-  statusEl.classList.add("has-update");
-  statusEl.textContent = data.remoteMessage
-    ? `${data.remoteMessage} (main · ${shortSha(data.remoteCommit)})`
-    : `New version on ${data.ref} · ${shortSha(data.remoteCommit)}`;
   const applyBtn = $("update-apply");
-  applyBtn.disabled = !data.applyAvailable;
-  applyBtn.hidden = false;
-  const hint = $("update-hint");
-  if (data.applyAvailable) {
-    hint.textContent = "Pulls latest blank-cloud and restarts Docker.";
-  } else {
-    hint.textContent = "Or on the host: cd ~/blank-cloud && bash scripts/update.sh";
-  }
+  applyBtn.disabled = false;
+  applyBtn.textContent = data.applyAvailable ? "Update now" : "Update available";
 }
 
+/** Check GitHub on every page load; show the button only when an update exists. */
 async function loadUpdateStatus() {
+  $("update-panel").hidden = true;
   try {
-    let data = await api("/update/status");
-    if (!data.updateAvailable && data.autoCheckEnabled !== false) {
-      const last = data.lastCheckAt ? Date.parse(data.lastCheckAt) : 0;
-      const oneHour = 60 * 60 * 1000;
-      if (!Number.isFinite(last) || Date.now() - last > oneHour) {
-        try {
-          data = await api("/update/check", { method: "POST", body: "{}" });
-        } catch {
-          /* keep cached status */
-        }
-      }
-    }
+    const data = await api("/update/check");
     renderUpdatePanel(data);
   } catch {
-    $("update-panel").hidden = true;
+    try {
+      renderUpdatePanel(await api("/update/status"));
+    } catch {
+      $("update-panel").hidden = true;
+    }
   }
 }
 
 async function applyUpdateNow() {
+  if (!updateSnapshot?.updateAvailable) {
+    return;
+  }
+  if (!updateSnapshot.applyAvailable) {
+    addSystemNote("Update on the host: cd ~/blank-cloud && bash scripts/update.sh");
+    return;
+  }
   if (!confirm("Pull latest blank-cloud and restart the container? Active agent runs may be interrupted.")) {
     return;
   }

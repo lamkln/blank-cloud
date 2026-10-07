@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>blank-cloud</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="icon" type="image/png" sizes="32x32" href="/ui/favicon-32.png" />
     <link rel="apple-touch-icon" href="/ui/apple-touch-icon.png" />
     <link rel="stylesheet" href="/ui/styles.css?v=0.4.0" />
@@ -121,15 +124,7 @@
             <p class="fine-print">Stored in <code>/app/data/settings.json</code> on the host (<code>./data</code> by default).</p>
           </div>
           <div class="update-panel" id="update-panel" hidden>
-            <div class="update-head">
-              <span class="update-title">Update available</span>
-              <span class="update-version" id="update-version"></span>
-            </div>
-            <p class="fine-print update-status" id="update-status"></p>
-            <div class="update-actions">
-              <button type="button" class="btn btn-sm btn-primary" id="update-apply">Update now</button>
-            </div>
-            <p class="fine-print" id="update-hint"></p>
+            <button type="button" class="btn btn-sm btn-primary" id="update-apply">Update now</button>
           </div>
         </div>
       </aside>
@@ -201,6 +196,6 @@
       </aside>
     </div>
     <script src="/ui/markdown.js?v=0.4.0"></script>
-    <script src="/ui/app.js?v=0.4.0" type="module"></script>
+    <script src="/ui/app.js?v=0.4.1" type="module"></script>
   </body>
 </html>

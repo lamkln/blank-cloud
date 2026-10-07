@@ -21,7 +21,7 @@ function signedIn(c: Context): boolean {
 
 update.get("/status", (c) => c.json(getUpdateStatus()));
 
-update.post("/check", async (c) => {
+async function handleCheck(c: Context) {
   try {
     const status = await checkForUpdates(true);
     return c.json(status);
@@ -29,7 +29,11 @@ update.post("/check", async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ error: message, ...getUpdateStatus() }, 502);
   }
-});
+}
+
+update.get("/check", (c) => handleCheck(c));
+
+update.post("/check", (c) => handleCheck(c));
 
 const patchSchema = z.object({
   autoCheckEnabled: z.boolean().optional(),
