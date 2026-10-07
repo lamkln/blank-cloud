@@ -96,8 +96,55 @@ function escapeHtml(s) {
 
 function setStatus(status) {
   state.status = status;
-  $("status-dot").className = `status-dot ${status}`;
-  $("status-label").textContent = STATUS_LABEL[status] ?? status.replace(/_/g, " ");
+  const pill = $("status-label");
+  if (pill) {
+    pill.className = `status-pill status-${status}`;
+    pill.textContent = STATUS_LABEL[status] ?? status.replace(/_/g, " ");
+  }
+}
+
+function setReviewOpen(open) {
+  $("app-root")?.classList.toggle("review-open", Boolean(open));
+}
+
+function openModal(backdropId) {
+  const el = $(backdropId);
+  if (el) el.hidden = false;
+}
+
+function closeModal(backdropId) {
+  const el = $(backdropId);
+  if (el) el.hidden = true;
+}
+
+function bindModal(backdropId, closeId) {
+  const backdrop = $(backdropId);
+  const closeBtn = $(closeId);
+  if (!backdrop) return;
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) closeModal(backdropId);
+  });
+  backdrop.querySelector(".modal")?.addEventListener("click", (e) => e.stopPropagation());
+  closeBtn?.addEventListener("click", () => closeModal(backdropId));
+}
+
+function updateSidebarModel() {
+  const el = $("sidebar-model");
+  if (!el || !settingsSnapshot) return;
+  const provider = settingsSnapshot.provider || "";
+  const model = (settingsSnapshot.model || "").trim();
+  const configured = settingsSnapshot.providers?.find((p) => p.id === provider)?.configured;
+  if (!configured) {
+    el.textContent = provider ? `${provider} · needs key` : "Not configured";
+    el.classList.add("warn");
+    return;
+  }
+  el.classList.remove("warn");
+  if (!model) {
+    el.textContent = provider ? `${provider} · no model` : "Not configured";
+    return;
+  }
+  el.textContent = provider ? `${provider} · ${model}` : model;
 }
 
 function updateEmptyState() {
@@ -394,9 +441,11 @@ function renderChanges(task) {
   const p = task.pendingProposal;
   if (!p || task.status !== "awaiting_approval") {
     panel.hidden = true;
+    setReviewOpen(false);
     return;
   }
   panel.hidden = false;
+  setReviewOpen(true);
   $("change-summary").textContent = p.summary;
   const filesEl = $("change-files");
   filesEl.innerHTML = "";
@@ -533,9 +582,11 @@ function newRun() {
   closeStream();
   stopPoll();
   setStatus("idle");
-  $("run-title").textContent = "New agent";
+  $("run-title").textContent = "New Chat";
   $("run-meta").textContent = "";
+  $("run-meta").hidden = true;
   $("changes-panel").hidden = true;
+  setReviewOpen(false);
   $("composer-input").focus();
   void loadRuns();
 }
@@ -965,6 +1016,7 @@ async function loadSettings() {
   $("custom-base-url").value = data.customBaseUrl || "";
   syncProviderFields();
   refreshKeyHint();
+  updateSidebarModel();
   $("api-key").value = "";
   for (const input of document.querySelectorAll("[data-key]")) {
     input.value = "";
@@ -1076,13 +1128,12 @@ $("provider").addEventListener("change", () => {
   setSettingsStatus("", null);
 });
 
-$("settings-toggle").addEventListener("click", () => {
-  const pop = $("settings-popover");
-  const open = pop.hidden;
-  if (open) void loadSettings();
-  pop.hidden = !open;
-  $("settings-toggle").setAttribute("aria-expanded", String(open));
-});
+function openSettingsModal() {
+  void loadSettings().then(() => openModal("settings-modal"));
+}
+
+$("settings-open")?.addEventListener("click", openSettingsModal);
+bindModal("settings-modal", "settings-close");
 
 $("composer-input").addEventListener("input", resizeComposer);
 $("composer-input").addEventListener("keydown", (e) => {
@@ -1092,12 +1143,8 @@ $("composer-input").addEventListener("keydown", (e) => {
   }
 });
 
-document.addEventListener("click", (e) => {
-  const pop = $("settings-popover");
-  if (pop.hidden) return;
-  if (e.target.closest("#settings-popover") || e.target.closest("#settings-toggle")) return;
-  pop.hidden = true;
-  $("settings-toggle").setAttribute("aria-expanded", "false");
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal("settings-modal");
 });
 
 void loadHealth();

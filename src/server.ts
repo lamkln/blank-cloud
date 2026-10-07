@@ -49,7 +49,7 @@ app.get("/health", (c) =>
     ok: true,
     version: appVersion.version ?? "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "fix-custom-model",
+    ui: "ui-polish-v2",
     workspace: getWorkspaceRoot(),
   }),
 );
