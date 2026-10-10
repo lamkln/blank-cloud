@@ -722,7 +722,16 @@ async function applyUpdateNow() {
   try {
     const data = await api("/update/apply", { method: "POST", body: "{}" });
     renderUpdatePanel(data);
-    addSystemNote(data.message || data.error || "Update started");
+    const msg = data.message || data.error || "Update started";
+    addSystemNote(msg);
+    if (
+      typeof msg === "string" &&
+      (msg.includes("origin/main") || msg.includes("HTTP 400") || msg.includes("git fetch"))
+    ) {
+      addSystemNote(
+        "Host fix: curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/cursor/ui-polish-d75c/scripts/recover-from-github.sh | bash -s ~/blank-cloud && docker compose up -d --build",
+      );
+    }
   } catch (e) {
     addSystemNote(e.message);
   } finally {

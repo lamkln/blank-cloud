@@ -33,8 +33,14 @@ install_or_update_repo() {
       BLANK_CLOUD_INSTALL_DIR="${INSTALL_DIR}" BLANK_CLOUD_REF="${REF}" \
         bash "${INSTALL_DIR}/scripts/git-pull.sh"
     else
-      git -C "$INSTALL_DIR" fetch origin "$REF"
-      git -C "$INSTALL_DIR" checkout -B "$REF" "$(git -C "$INSTALL_DIR" rev-parse "origin/${REF}")"
+      SHA="$(git ls-remote "${REPO_URL}" "refs/heads/${REF}" | awk '{print $1}')"
+      if [[ -z "${SHA}" ]]; then
+        git -C "$INSTALL_DIR" fetch origin "$REF"
+        SHA="$(git -C "$INSTALL_DIR" rev-parse "refs/remotes/origin/${REF}")"
+      else
+        git -C "$INSTALL_DIR" fetch "${REPO_URL}" "${SHA}"
+      fi
+      git -C "$INSTALL_DIR" checkout -B "$REF" "${SHA}"
     fi
     return
   fi
