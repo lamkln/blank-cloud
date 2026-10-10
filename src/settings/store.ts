@@ -32,7 +32,7 @@ export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   groq: "llama-3.3-70b-versatile",
   openrouter: "openai/gpt-4o",
   nim: "meta/llama-3.1-8b-instruct",
-  custom: "gpt-4o",
+  custom: "",
 };
 
 export function parseProvider(raw: string | undefined): LlmProvider {
@@ -172,15 +172,31 @@ function repoFromEnv(): RepoSettings {
   };
 }
 
+function resolveStoredModel(
+  raw: Partial<AppSettings>,
+  base: AppSettings,
+): string {
+  if (typeof raw.model === "string") {
+    return raw.model.trim();
+  }
+  const provider = parseProvider(raw.provider ?? base.provider);
+  if (provider === "custom") {
+    return process.env.LLM_MODEL?.trim() || "";
+  }
+  return base.model;
+}
+
 function defaultSettings(): AppSettings {
   const provider = parseProvider(process.env.LLM_PROVIDER);
   const baseUrl =
     provider === "nim"
       ? defaultNimBaseUrl()
       : process.env.CUSTOM_OPENAI_BASE_URL?.trim() || "";
+  const envModel = process.env.LLM_MODEL?.trim();
   return {
     provider,
-    model: process.env.LLM_MODEL?.trim() || DEFAULT_MODELS[provider],
+    model:
+      envModel || (provider === "custom" ? "" : DEFAULT_MODELS[provider]),
     customBaseUrl: baseUrl,
     keys: keysFromEnv(),
     repo: repoFromEnv(),
@@ -211,7 +227,7 @@ export function loadAppSettings(): AppSettings {
       const base = defaultSettings();
       cached = {
         provider: parseProvider(raw.provider ?? base.provider),
-        model: raw.model?.trim() || base.model,
+        model: resolveStoredModel(raw, base),
         customBaseUrl: raw.customBaseUrl?.trim() ?? base.customBaseUrl,
         keys: { ...base.keys, ...(raw.keys ?? {}) },
         repo: { ...base.repo, ...(raw.repo ?? {}) },
@@ -250,10 +266,10 @@ export function updateAppSettings(
     repo: { ...current.repo, ...(partial.repo ?? {}) },
     update: { ...current.update, ...(partial.update ?? {}) },
   };
-  if (partial.provider && partial.provider !== current.provider) {
-    next.model = DEFAULT_MODELS[partial.provider];
-  } else if (partial.model?.trim()) {
+  if (partial.model?.trim()) {
     next.model = partial.model.trim();
+  } else if (partial.provider && partial.provider !== current.provider) {
+    next.model = DEFAULT_MODELS[partial.provider];
   }
   if (partial.provider === "nim" && !next.customBaseUrl.trim()) {
     next.customBaseUrl = DEFAULT_NIM_BASE_URL;

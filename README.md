@@ -38,6 +38,71 @@ Installer options (prefix the command): `BLANK_CLOUD_INSTALL_DIR`, `BLANK_CLOUD_
 
 The installer creates `~/blank-cloud/.env`. Add your LLM API key in the Web UI (**Model**), then run `cd ~/blank-cloud && docker compose up -d`.
 
+### UI won’t load (connection timed out)
+
+Run these **on the NAS** (SSH or terminal), not on your laptop:
+
+```bash
+cd ~/blank-cloud
+docker compose ps
+docker compose logs --tail 80 blank-cloud
+curl -s -m 5 http://127.0.0.1:8787/health || echo "not responding on host"
+```
+
+| Symptom | What to do |
+|--------|------------|
+| `ps` shows no container or `Exit` | `docker compose up -d --build` |
+| `curl` works on NAS but not from PC | Use the NAS **LAN** IP (`192.168.x.x`, not `127.0.0.1`). Check typo: **`192.168`**, not `192.169`. |
+| `curl` fails on NAS too | Read `logs` for crash (port in use, bad `data/` permissions). |
+| After reboot | `cd ~/blank-cloud && docker compose up -d` (compose uses `restart: unless-stopped` on recent installs). |
+
+From your PC: `curl -m 5 http://192.168.x.x:8787/health` (replace with real NAS IP).
+
+### Works today (NAS quick path)
+
+**Update** (on the host):
+
+```bash
+cd ~/blank-cloud && bash scripts/update.sh
+```
+
+**`git checkout -B main origin/main` / HTTP 400** — do **not** use `origin/main` as the checkout target. On the **NAS host**, reset by commit SHA (works even when `origin/main` is broken):
+
+```bash
+cd ~/blank-cloud
+curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/cursor/ui-polish-d75c/scripts/recover-from-github.sh | bash -s ~/blank-cloud
+docker compose up -d --build
+```
+
+Or manually:
+
+```bash
+cd ~/blank-cloud
+SHA=$(git ls-remote https://github.com/lamkln/blank-cloud.git refs/heads/main | awk '{print $1}')
+git fetch https://github.com/lamkln/blank-cloud.git "$SHA"
+git checkout -B main "$SHA"
+docker compose up -d --build
+```
+
+If `git ls-remote` fails, test: `curl -I https://github.com` and fix DNS/firewall on the host.
+
+Hard refresh the browser after the container restarts.
+
+**Manifest / custom OpenAI-compatible gateway** (e.g. `https://app.manifest.build/v1`):
+
+1. Sidebar **System → Model** (opens settings).
+2. Provider: **custom**, Base URL: your gateway `/v1` URL, API key, Model ID: **`auto`** (or the exact id from your gateway routing page).
+3. **Save** → **Test connection** — status should show `custom / auto` (not `gpt-4o`).
+4. Confirm: `curl -s http://localhost:8787/health | jq .llm` — `model` must match what you saved.
+
+If `main` is behind and update does not pick up fixes yet, deploy the release branch once:
+
+```bash
+cd ~/blank-cloud && git fetch origin && git checkout cursor/ui-polish-d75c && bash scripts/update.sh
+```
+
+Then merge [PR #50](https://github.com/lamkln/blank-cloud/pull/50) when ready so `main` stays the default update target.
+
 ### Auto-update
 
 The sidebar **Updates** panel checks [GitHub `main`](https://github.com/lamkln/blank-cloud) for new commits. Toggles:
@@ -57,7 +122,7 @@ cd ~/blank-cloud && bash scripts/update.sh
 0 4 * * * BLANK_CLOUD_INSTALL_DIR=$HOME/blank-cloud $HOME/blank-cloud/scripts/auto-update-cron.sh
 ```
 
-**One-click update from the Web UI** mounts your install directory and the Docker socket (trusted home/LAN only):
+**One-click update from the Web UI** mounts your install directory and the Docker socket (trusted home/LAN only). The update script marks the mounted clone as a [safe Git directory](https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory) so root inside the container can run `git fetch` on your host-owned `/install` tree.
 
 ```bash
 cp docker-compose.override.example.yml docker-compose.override.yml

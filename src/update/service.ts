@@ -120,6 +120,7 @@ export async function applyUpdates(source: "manual" | "auto" = "manual"): Promis
   const script = path.join(install, "scripts", "update.sh");
   applyInFlight = true;
   const settings = loadAppSettings();
+  const targetSha = settings.update.lastRemoteSha?.trim() ?? "";
   updateAppSettings({
     update: {
       ...settings.update,
@@ -134,6 +135,7 @@ export async function applyUpdates(source: "manual" | "auto" = "manual"): Promis
         ...process.env,
         BLANK_CLOUD_INSTALL_DIR: install,
         BLANK_CLOUD_REF: defaultRef(settings),
+        ...(targetSha ? { BLANK_CLOUD_TARGET_COMMIT: targetSha } : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
