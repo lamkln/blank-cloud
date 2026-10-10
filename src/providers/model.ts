@@ -8,7 +8,11 @@ import {
   getProviderApiKey,
   getRuntimeSettings,
 } from "../config.js";
-import { getNimBaseUrl, loadAppSettings } from "../settings/store.js";
+import {
+  DEFAULT_GROK_BASE_URL,
+  getNimBaseUrl,
+  loadAppSettings,
+} from "../settings/store.js";
 
 export function createLanguageModel(): LanguageModel {
   const { provider, model, customBaseUrl } = getRuntimeSettings();
@@ -34,6 +38,13 @@ export function createLanguageModel(): LanguageModel {
     case "groq": {
       const groq = createGroq({ apiKey: requireKey(getProviderApiKey("groq")) });
       return groq(model);
+    }
+    case "grok": {
+      const xai = createOpenAI({
+        apiKey: requireKey(getProviderApiKey("grok")),
+        baseURL: DEFAULT_GROK_BASE_URL.replace(/\/$/, ""),
+      });
+      return xai(model);
     }
     case "openrouter": {
       const openrouter = createOpenAI({

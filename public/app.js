@@ -1010,6 +1010,7 @@ const API_KEY_LABELS = {
   anthropic: "Anthropic API key",
   gemini: "Google Gemini API key",
   groq: "Groq API key",
+  grok: "xAI Grok API key (console.x.ai)",
   openrouter: "OpenRouter API key",
   nim: "NVIDIA NIM API key",
   custom: "Custom OpenAI-compatible API key",
@@ -1038,6 +1039,7 @@ function syncProviderFields() {
   $("custom-url-wrap").hidden = !needsBase;
   $("nim-help").hidden = provider !== "nim";
   $("load-nim-models").hidden = provider !== "nim";
+  $("load-grok-models").hidden = provider !== "grok";
   $("base-url-label").textContent =
     provider === "nim" ? "NIM base URL (OpenAI-compatible)" : "Base URL";
   $("custom-base-url").placeholder =
@@ -1048,6 +1050,9 @@ function syncProviderFields() {
   const modelInput = $("model");
   if (provider === "custom") {
     modelInput.placeholder = "e.g. auto (Manifest), llama3.2, your-gateway-model-id";
+    modelInput.removeAttribute("readonly");
+  } else if (provider === "grok") {
+    modelInput.placeholder = "e.g. grok-3, grok-3-mini, grok-2-1212";
     modelInput.removeAttribute("readonly");
   } else {
     modelInput.placeholder = metaDefaultPlaceholder(provider);
@@ -1169,6 +1174,32 @@ async function testSettingsConnection() {
   }
 }
 
+async function loadGrokModels() {
+  setSettingsStatus("Loading models from xAI…", null);
+  try {
+    const res = await api("/settings/grok/models");
+    const models = res.models || [];
+    if (!models.length) {
+      setSettingsStatus("No models returned from xAI.", "err");
+      return;
+    }
+    const current = $("model").value.trim();
+    if (!current || !models.includes(current)) {
+      $("model").value = models.includes("grok-3") ? "grok-3" : models[0];
+    }
+    const preview =
+      models.length <= 8
+        ? models.join(", ")
+        : `${models.slice(0, 6).join(", ")} … (+${models.length - 6} more)`;
+    setSettingsStatus(
+      `Listed ${models.length} Grok model(s). Pick one, Save, then Test connection.\n${preview}`,
+      "ok",
+    );
+  } catch (e) {
+    setSettingsStatus(e.message, "err");
+  }
+}
+
 async function loadNimModels() {
   setSettingsStatus("Loading models from NIM…", null);
   try {
@@ -1202,6 +1233,7 @@ $("reject").addEventListener("click", () => void reject());
 $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());
 $("test-settings").addEventListener("click", () => void testSettingsConnection());
+$("load-grok-models").addEventListener("click", () => void loadGrokModels());
 $("load-nim-models").addEventListener("click", () => void loadNimModels());
 $("update-apply").addEventListener("click", () => void applyUpdateNow());
 $("github-device-copy").addEventListener("click", async () => {

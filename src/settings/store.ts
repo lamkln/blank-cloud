@@ -6,9 +6,12 @@ export type LlmProvider =
   | "anthropic"
   | "gemini"
   | "groq"
+  | "grok"
   | "openrouter"
   | "nim"
   | "custom";
+
+export const DEFAULT_GROK_BASE_URL = "https://api.x.ai/v1";
 
 export const DEFAULT_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
@@ -30,6 +33,7 @@ export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   anthropic: "claude-sonnet-4-20250514",
   gemini: "gemini-2.0-flash",
   groq: "llama-3.3-70b-versatile",
+  grok: "grok-3",
   openrouter: "openai/gpt-4o",
   nim: "meta/llama-3.1-8b-instruct",
   custom: "",
@@ -40,11 +44,15 @@ export function parseProvider(raw: string | undefined): LlmProvider {
   if (v === "nvidia-nim" || v === "nvidia_nim") {
     return "nim";
   }
+  if (v === "xai" || v === "x-ai") {
+    return "grok";
+  }
   if (
     v === "openai" ||
     v === "anthropic" ||
     v === "gemini" ||
     v === "groq" ||
+    v === "grok" ||
     v === "openrouter" ||
     v === "nim" ||
     v === "custom"
@@ -59,6 +67,7 @@ export interface ProviderKeys {
   anthropic: string;
   gemini: string;
   groq: string;
+  grok: string;
   openrouter: string;
   nim: string;
   customApiKey: string;
@@ -123,6 +132,7 @@ const KEY_FIELDS: Record<LlmProvider, keyof ProviderKeys | "customBaseUrl"> = {
   anthropic: "anthropic",
   gemini: "gemini",
   groq: "groq",
+  grok: "grok",
   openrouter: "openrouter",
   nim: "nim",
   custom: "customApiKey",
@@ -144,6 +154,7 @@ function keysFromEnv(): ProviderKeys {
     anthropic: process.env.ANTHROPIC_API_KEY?.trim() || "",
     gemini: process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || "",
     groq: process.env.GROQ_API_KEY?.trim() || "",
+    grok: process.env.XAI_API_KEY?.trim() || process.env.GROK_API_KEY?.trim() || "",
     openrouter: process.env.OPENROUTER_API_KEY?.trim() || "",
     nim: process.env.NIM_API_KEY?.trim() || "",
     customApiKey: process.env.CUSTOM_OPENAI_API_KEY?.trim() || "",
@@ -309,6 +320,7 @@ export function maskedKeys(settings: AppSettings): Record<keyof ProviderKeys, st
     anthropic: maskSecret(settings.keys.anthropic),
     gemini: maskSecret(settings.keys.gemini),
     groq: maskSecret(settings.keys.groq),
+    grok: maskSecret(settings.keys.grok),
     openrouter: maskSecret(settings.keys.openrouter),
     nim: maskSecret(settings.keys.nim),
     customApiKey: maskSecret(settings.keys.customApiKey),

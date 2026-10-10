@@ -21,6 +21,7 @@ const keysSchema = z
     anthropic: z.string().optional(),
     gemini: z.string().optional(),
     groq: z.string().optional(),
+    grok: z.string().optional(),
     openrouter: z.string().optional(),
     nim: z.string().optional(),
     customApiKey: z.string().optional(),
@@ -29,7 +30,7 @@ const keysSchema = z
 
 const patchSchema = z.object({
   provider: z
-    .enum(["openai", "anthropic", "gemini", "groq", "openrouter", "nim", "custom"])
+    .enum(["openai", "anthropic", "gemini", "groq", "grok", "openrouter", "nim", "custom"])
     .optional(),
   model: z.string().min(1).optional(),
   customBaseUrl: z.string().optional(),
@@ -79,6 +80,35 @@ settings.get("/nim/models", async (c) => {
     return c.json({ error: "Unexpected models response from NIM" }, 502);
   }
   return c.json({ base, models: ids });
+});
+
+settings.get("/grok/models", async (c) => {
+  const app = loadAppSettings();
+  const key = app.keys.grok.trim();
+  if (!key) {
+    return c.json({ error: "Save an xAI (Grok) API key first" }, 400);
+  }
+  const res = await fetch("https://api.x.ai/v1/models", {
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    return c.json(
+      {
+        error: `Could not list Grok models (HTTP ${res.status})`,
+        detail: text.slice(0, 300),
+      },
+      502,
+    );
+  }
+  let ids: string[] = [];
+  try {
+    const json = JSON.parse(text) as { data?: { id: string }[] };
+    ids = (json.data ?? []).map((m) => m.id).filter(Boolean).sort();
+  } catch {
+    return c.json({ error: "Unexpected models response from xAI" }, 502);
+  }
+  return c.json({ models: ids });
 });
 
 settings.post("/test", async (c) => {
