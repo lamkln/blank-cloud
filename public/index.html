@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="icon" type="image/png" sizes="32x32" href="/ui/favicon-32.png" />
     <link rel="apple-touch-icon" href="/ui/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/ui/styles.css?v=0.4.0" />
+    <link rel="stylesheet" href="/ui/styles.css?v=0.4.1" />
   </head>
   <body class="owui">
     <div class="app" id="app-root">
@@ -267,6 +267,7 @@
             <label class="field"><span>Gemini</span><input data-key="gemini" type="password" autocomplete="off" /></label>
             <p class="settings-subheading">Fast &amp; routers</p>
             <label class="field"><span>Groq</span><input data-key="groq" type="password" autocomplete="off" /></label>
+            <label class="field"><span>xAI Grok</span><input data-key="grok" type="password" autocomplete="off" /></label>
             <label class="field"><span>OpenRouter</span><input data-key="openrouter" type="password" autocomplete="off" /></label>
             <p class="settings-subheading">Self-hosted</p>
             <label class="field"><span>NVIDIA NIM</span><input data-key="nim" type="password" autocomplete="off" /></label>
@@ -277,6 +278,7 @@
             <div class="settings-actions">
               <button type="button" class="btn btn-sm btn-primary" id="save-settings">Save</button>
               <button type="button" class="btn btn-sm" id="test-settings">Test connection</button>
+              <button type="button" class="btn btn-sm" id="load-grok-models" hidden>Load Grok models</button>
               <button type="button" class="btn btn-sm" id="load-nim-models" hidden>Load NIM models</button>
             </div>
             <p class="fine-print settings-status" id="settings-status" hidden></p>
@@ -286,7 +288,7 @@
       </div>
     </div>
 
-    <script src="/ui/markdown.js?v=0.4.0"></script>
-    <script src="/ui/app.js?v=0.4.0" type="module"></script>
+    <script src="/ui/markdown.js?v=0.4.1"></script>
+    <script src="/ui/app.js?v=0.4.1" type="module"></script>
   </body>
 </html>

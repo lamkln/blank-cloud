@@ -256,7 +256,7 @@ services:
     environment:
       PORT: "8787"
       WORKSPACE: /workspace
-      # Provider: openai | anthropic | gemini | groq | openrouter | custom
+      # Provider: openai | anthropic | gemini | groq | grok | openrouter | nim | custom
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       LLM_MODEL: ${LLM_MODEL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
