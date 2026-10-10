@@ -15,6 +15,7 @@ import { settingsRoutes } from "./routes/settings.js";
 import { repoRoutes } from "./routes/repo.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { updateRoutes } from "./routes/update.js";
+import { previewRoutes } from "./routes/preview.js";
 import { BUILD_INFO } from "./build-info.generated.js";
 import { startAutoUpdateScheduler } from "./update/service.js";
 
@@ -51,7 +52,7 @@ app.get("/health", (c) => {
     ok: true,
     version: appVersion.version ?? "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "0.3.5",
+    ui: "0.3.6",
     workspace: getWorkspaceRoot(),
     llm: {
       provider: runtime.provider,
@@ -71,6 +72,9 @@ app.route("/repo", repoRoutes);
 app.use("/tasks", requireGitHubSignIn);
 app.use("/tasks/*", requireGitHubSignIn);
 app.route("/tasks", taskRoutes);
+app.use("/preview", requireGitHubSignIn);
+app.use("/preview/*", requireGitHubSignIn);
+app.route("/preview", previewRoutes);
 
 app.get("/", serveStatic({ root: publicRoot, path: "index.html" }));
 app.get(
