@@ -66,12 +66,18 @@ From your PC: `curl -m 5 http://192.168.x.x:8787/health` (replace with real NAS 
 cd ~/blank-cloud && bash scripts/update.sh
 ```
 
-**`git checkout -B main origin/main` / HTTP 400** — do **not** use `origin/main` as the checkout target. On the **NAS host**, reset by commit SHA (works even when `origin/main` is broken):
+**`git checkout -B main origin/main` / HTTP 400** — the **container image** was still on old code, or `main` was checked out before [PR #50](https://github.com/lamkln/blank-cloud/pull/50). On the **NAS host** (SSH), run the one-shot fix (checkout + **rebuild image**):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/scripts/nas-fix.sh | bash
+```
+
+If `nas-fix.sh` is not on your checkout yet:
 
 ```bash
 cd ~/blank-cloud
-curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/cursor/ui-polish-d75c/scripts/recover-from-github.sh | bash -s ~/blank-cloud
-docker compose up -d --build
+curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/scripts/recover-from-github.sh | bash -s ~/blank-cloud
+docker compose build --no-cache && docker compose up -d
 ```
 
 Or manually:
