@@ -38,6 +38,31 @@ Installer options (prefix the command): `BLANK_CLOUD_INSTALL_DIR`, `BLANK_CLOUD_
 
 The installer creates `~/blank-cloud/.env`. Add your LLM API key in the Web UI (**Model**), then run `cd ~/blank-cloud && docker compose up -d`.
 
+### Works today (NAS quick path)
+
+**Update** (on the host):
+
+```bash
+cd ~/blank-cloud && bash scripts/update.sh
+```
+
+Hard refresh the browser after the container restarts.
+
+**Manifest / custom OpenAI-compatible gateway** (e.g. `https://app.manifest.build/v1`):
+
+1. Sidebar **System → Model** (opens settings).
+2. Provider: **custom**, Base URL: your gateway `/v1` URL, API key, Model ID: **`auto`** (or the exact id from your gateway routing page).
+3. **Save** → **Test connection** — status should show `custom / auto` (not `gpt-4o`).
+4. Confirm: `curl -s http://localhost:8787/health | jq .llm` — `model` must match what you saved.
+
+If `main` is behind and update does not pick up fixes yet, deploy the release branch once:
+
+```bash
+cd ~/blank-cloud && git fetch origin && git checkout cursor/ui-polish-d75c && bash scripts/update.sh
+```
+
+Then merge [PR #50](https://github.com/lamkln/blank-cloud/pull/50) when ready so `main` stays the default update target.
+
 ### Auto-update
 
 The sidebar **Updates** panel checks [GitHub `main`](https://github.com/lamkln/blank-cloud) for new commits. Toggles:

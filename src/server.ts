@@ -6,8 +6,8 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { ensureWorkspace, getPort, getWorkspaceRoot } from "./config.js";
-import { ensureDataDir, loadAppSettings } from "./settings/store.js";
+import { ensureWorkspace, getPort, getRuntimeSettings, getWorkspaceRoot } from "./config.js";
+import { ensureDataDir, isProviderConfigured, loadAppSettings } from "./settings/store.js";
 import { attachUserContext, requireGitHubSignIn } from "./auth/middleware.js";
 import { ensureGitHubOAuthClientIdFile } from "./auth/github-client-id.js";
 import { authRoutes } from "./routes/auth.js";
@@ -44,15 +44,23 @@ app.use("*", async (c, next) => {
   }
 });
 
-app.get("/health", (c) =>
-  c.json({
+app.get("/health", (c) => {
+  const settings = loadAppSettings();
+  const runtime = getRuntimeSettings();
+  return c.json({
     ok: true,
     version: appVersion.version ?? "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "custom-model-auto",
+    ui: "0.3.1",
     workspace: getWorkspaceRoot(),
-  }),
-);
+    llm: {
+      provider: runtime.provider,
+      model: runtime.model,
+      configured: isProviderConfigured(runtime.provider, settings),
+      customBaseUrl: runtime.customBaseUrl || null,
+    },
+  });
+});
 
 app.route("/auth", authRoutes);
 app.route("/settings", settingsRoutes);
