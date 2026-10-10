@@ -192,6 +192,7 @@
           <button type="button" class="modal-close" id="preview-close" aria-label="Close">×</button>
         </header>
         <div class="modal-body preview-modal-body">
+          <p class="fine-print preview-repo-label" id="preview-repo-label" hidden></p>
           <div class="preview-toolbar">
             <label class="field field-inline">
               <span>Path</span>
@@ -201,7 +202,7 @@
             <button type="button" class="btn btn-sm" id="preview-new-tab">Open tab</button>
           </div>
           <p class="fine-print preview-hint" id="preview-hint">
-            Serves static files from your workspace. For Vite/Next dev servers, run them separately and open their port.
+            Static files from the repository you selected in Workspace (not blank-cloud itself).
           </p>
           <div class="preview-frame-wrap">
             <iframe id="preview-frame" title="Website preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>

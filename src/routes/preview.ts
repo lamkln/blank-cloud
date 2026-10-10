@@ -1,22 +1,28 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Hono } from "hono";
-import { getWorkspaceRoot } from "../config.js";
 import {
   injectHtmlBaseHref,
   listPreviewCandidates,
   previewFileBaseUrl,
 } from "../preview/candidates.js";
+import { previewScopeOrResponse } from "../preview/guard.js";
 import { isPreviewHtmlType, previewContentType } from "../preview/mime.js";
 import { resolveWorkspacePath, WorkspacePathError } from "../workspace/paths.js";
 
 const preview = new Hono();
 
 preview.get("/meta", (c) => {
-  const root = getWorkspaceRoot();
-  const { defaultPath, candidates } = listPreviewCandidates();
+  const scope = previewScopeOrResponse(c);
+  if (scope instanceof Response) {
+    return scope;
+  }
+  const { root, repo } = scope;
+  const { defaultPath, candidates } = listPreviewCandidates(root);
+  const fullName = repo.githubRepoFullName.trim();
   return c.json({
-    workspace: root,
+    repo: fullName,
+    branch: repo.branch.trim() || "main",
     defaultPath,
     candidates,
     previewUrl: defaultPath ? `/preview/file/${defaultPath}` : null,
@@ -36,11 +42,16 @@ function relativePreviewPath(c: { req: { path: string } }): string {
 }
 
 preview.get("/file/*", async (c) => {
+  const scope = previewScopeOrResponse(c);
+  if (scope instanceof Response) {
+    return scope;
+  }
+  const { root } = scope;
   const relative = relativePreviewPath(c) || "index.html";
 
   let abs: string;
   try {
-    abs = resolveWorkspacePath(relative);
+    abs = resolveWorkspacePath(relative, root);
   } catch (e) {
     const msg = e instanceof WorkspacePathError ? e.message : "Invalid path";
     return c.text(msg, 400);
