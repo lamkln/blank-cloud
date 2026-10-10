@@ -34,6 +34,7 @@ const state = {
   status: "idle",
   eventSource: null,
   pollTimer: null,
+  pendingUserEcho: null,
   seenEventIds: new Set(),
   terminalBody: null,
   activeStream: null,
@@ -341,9 +342,14 @@ function ingestEvent(ev) {
     const streamId = ev.data?.streamId;
     if (!streamId) return;
     upsertStreamingTurn(role === "user" ? "user" : "agent", streamId, msg);
+    setStatus("running");
     return;
   }
   if (type === "message") {
+    if (role === "user" && state.pendingUserEcho === msg) {
+      state.pendingUserEcho = null;
+      return;
+    }
     const roleKey = role === "user" ? "user" : "agent";
     if (
       state.activeStream &&
@@ -423,8 +429,18 @@ function closeStream() {
 
 function connectStream(taskId) {
   closeStream();
+  stopPoll();
   const es = new EventSource(`/tasks/${taskId}/stream`);
   state.eventSource = es;
+  es.onopen = () => {
+    setStatus("running");
+  };
+  es.onerror = () => {
+    if (state.eventSource === es) {
+      closeStream();
+      startPoll();
+    }
+  };
   for (const type of EVENT_TYPES) {
     es.addEventListener(type, (e) => {
       try {
@@ -529,8 +545,9 @@ async function refreshTask() {
 }
 
 function startPoll() {
+  if (state.eventSource) return;
   stopPoll();
-  state.pollTimer = setInterval(() => void refreshTask(), 2000);
+  state.pollTimer = setInterval(() => void refreshTask(), 800);
 }
 
 function stopPoll() {
@@ -618,6 +635,22 @@ function resizeComposer() {
 async function sendMessage() {
   const text = $("composer-input").value.trim();
   if (!text) return;
+  if (state.taskId) {
+    if (state.status === "awaiting_approval") {
+      addSystemNote("Accept or reject changes first");
+      return;
+    }
+    if (state.status === "running" || state.status === "executing") {
+      addSystemNote("Agent is still working");
+      return;
+    }
+  }
+  $("composer-input").value = "";
+  resizeComposer();
+  state.pendingUserEcho = text;
+  addTurn("user", text);
+  setStatus("running");
+  $("status-label").textContent = "Thinking…";
   $("send-btn").disabled = true;
   try {
     if (!state.taskId) {
@@ -626,29 +659,18 @@ async function sendMessage() {
         body: JSON.stringify({ prompt: text }),
       });
       state.taskId = task.id;
-      $("composer-input").value = "";
-      resizeComposer();
-      setStatus(task.status);
+      $("run-title").textContent = task.title || "Agent";
       connectStream(task.id);
-      startPoll();
-      await loadRuns();
-      await refreshTask();
+      void loadRuns();
     } else {
-      if (state.status === "awaiting_approval") throw new Error("Accept or reject changes first");
-      if (state.status === "running" || state.status === "executing") {
-        throw new Error("Agent is still working");
-      }
-      $("composer-input").value = "";
-      resizeComposer();
       await api(`/tasks/${state.taskId}/message`, {
         method: "POST",
         body: JSON.stringify({ message: text }),
       });
-      setStatus("running");
       connectStream(state.taskId);
-      startPoll();
     }
   } catch (e) {
+    setStatus("failed");
     addSystemNote(e.message);
   } finally {
     $("send-btn").disabled = false;
@@ -890,7 +912,9 @@ async function connectGitHub() {
 
 async function selectGitHubRepo(fullName) {
   try {
-    $("repo-status").textContent = `Cloning ${fullName}…`;
+    $("repo-status").textContent = `Syncing ${fullName}…`;
+    $("repo-status").classList.add("syncing");
+    addSystemNote(`Syncing ${fullName} — this can take a minute on first clone.`);
     const res = await api("/repo/github/select", {
       method: "POST",
       body: JSON.stringify({ fullName, sync: true }),
@@ -901,6 +925,8 @@ async function selectGitHubRepo(fullName) {
   } catch (e) {
     showRepoSyncRecovery(e.message);
     await loadRepo();
+  } finally {
+    $("repo-status").classList.remove("syncing");
   }
 }
 
