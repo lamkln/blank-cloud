@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Reset blank-cloud install to latest GitHub main without relying on origin/main ref.
+# Reset blank-cloud install to a GitHub branch by commit SHA (never checkout origin/<branch>).
 # Usage: bash scripts/recover-from-github.sh [install-dir]
+# Resolves the branch tip via git ls-remote (works when origin/<branch> fetch fails).
 set -euo pipefail
 
 INSTALL_DIR="${1:-${BLANK_CLOUD_INSTALL_DIR:-$HOME/blank-cloud}}"
