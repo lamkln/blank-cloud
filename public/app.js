@@ -632,9 +632,28 @@ function resizeComposer() {
   ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
 }
 
+async function ensureModelConfigured() {
+  if (!settingsSnapshot) {
+    try {
+      await loadSettings();
+    } catch {
+      /* ignore */
+    }
+  }
+  const provider = settingsSnapshot?.provider;
+  const configured = settingsSnapshot?.providers?.find((p) => p.id === provider)?.configured;
+  if (!configured) {
+    addSystemNote("Set up Model first (sidebar → Model): provider, API key, Save, Test connection.");
+    openSettingsModal();
+    return false;
+  }
+  return true;
+}
+
 async function sendMessage() {
   const text = $("composer-input").value.trim();
   if (!text) return;
+  if (!(await ensureModelConfigured())) return;
   if (state.taskId) {
     if (state.status === "awaiting_approval") {
       addSystemNote("Accept or reject changes first");
@@ -686,6 +705,11 @@ async function approve() {
     await api(`/tasks/${state.taskId}/approve`, { method: "POST", body: "{}" });
     connectStream(state.taskId);
     await refreshTask();
+    if (!$("preview-modal").hidden) {
+      previewMeta = null;
+      await loadPreviewMeta();
+      void refreshPreviewFrame();
+    }
   } catch (e) {
     addSystemNote(e.message);
   }
@@ -1272,9 +1296,37 @@ async function refreshPreviewFrame() {
   }
 }
 
+function fillPreviewPathList(candidates) {
+  const list = $("preview-path-list");
+  list.innerHTML = "";
+  for (const p of candidates ?? []) {
+    const opt = document.createElement("option");
+    opt.value = p;
+    list.appendChild(opt);
+  }
+}
+
+async function scaffoldPreviewPage() {
+  try {
+    const res = await api("/preview/scaffold", { method: "POST", body: "{}" });
+    previewMeta = null;
+    await loadPreviewMeta();
+    $("preview-path").value = res.paths?.[0] ?? "index.html";
+    fillPreviewPathList(previewMeta?.candidates ?? []);
+    await refreshPreviewFrame();
+    addSystemNote("Created starter index.html and styles.css in your repo workspace.");
+  } catch (e) {
+    addSystemNote(e.message);
+  }
+}
+
 async function openPreviewModal() {
+  await loadRepo();
   if ($("preview-open")?.disabled) {
-    addSystemNote("Select a GitHub repository in Workspace before previewing.");
+    addSystemNote("Connect GitHub and select your repository in Workspace before previewing.");
+    return;
+  }
+  if (!(await ensureModelConfigured())) {
     return;
   }
   try {
@@ -1293,6 +1345,7 @@ async function openPreviewModal() {
     $("preview-modal-title").textContent = "Website preview";
   }
   const pathInput = $("preview-path");
+  fillPreviewPathList(previewMeta?.candidates ?? []);
   const preferred = previewMeta?.defaultPath ?? previewMeta?.candidates?.[0];
   if (preferred) {
     pathInput.value = preferred;
@@ -1317,6 +1370,7 @@ $("preview-new-tab").addEventListener("click", () => {
   const path = $("preview-path").value.trim() || "index.html";
   window.open(previewUrlForPath(path), "_blank", "noopener");
 });
+$("preview-scaffold").addEventListener("click", () => void scaffoldPreviewPage());
 $("preview-path").addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
