@@ -52,7 +52,7 @@ app.get("/health", (c) => {
   const runtime = getRuntimeSettings();
   return c.json({
     ok: true,
-    version: appVersion.version ?? "0.0.0",
+    version: BUILD_INFO.version || appVersion.version || "0.0.0",
     commit: BUILD_INFO.commit,
     ui: "0.4.3",
     openaiCompat: isOpenAiCompatEnabled(),

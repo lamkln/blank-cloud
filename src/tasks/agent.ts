@@ -329,6 +329,7 @@ async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void>
     },
   });
 
+  void result.consumeStream();
   await Promise.race([first.promise, result.text]);
   await withAgentTimeout(result.text, "Streaming agent");
   await finishAgentTurn(taskId);
