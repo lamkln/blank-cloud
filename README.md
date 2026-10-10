@@ -38,6 +38,26 @@ Installer options (prefix the command): `BLANK_CLOUD_INSTALL_DIR`, `BLANK_CLOUD_
 
 The installer creates `~/blank-cloud/.env`. Add your LLM API key in the Web UI (**Model**), then run `cd ~/blank-cloud && docker compose up -d`.
 
+### UI won’t load (connection timed out)
+
+Run these **on the NAS** (SSH or terminal), not on your laptop:
+
+```bash
+cd ~/blank-cloud
+docker compose ps
+docker compose logs --tail 80 blank-cloud
+curl -s -m 5 http://127.0.0.1:8787/health || echo "not responding on host"
+```
+
+| Symptom | What to do |
+|--------|------------|
+| `ps` shows no container or `Exit` | `docker compose up -d --build` |
+| `curl` works on NAS but not from PC | Use the NAS **LAN** IP (`192.168.x.x`, not `127.0.0.1`). Check typo: **`192.168`**, not `192.169`. |
+| `curl` fails on NAS too | Read `logs` for crash (port in use, bad `data/` permissions). |
+| After reboot | `cd ~/blank-cloud && docker compose up -d` (compose uses `restart: unless-stopped` on recent installs). |
+
+From your PC: `curl -m 5 http://192.168.x.x:8787/health` (replace with real NAS IP).
+
 ### Works today (NAS quick path)
 
 **Update** (on the host):
