@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { generateText, streamText, tool } from "ai";
 import { z } from "zod";
 import { createLanguageModel } from "../providers/model.js";
+import { logAgentTask } from "./agent-log.js";
 import {
   listDirectory,
   readWorkspaceFile,
@@ -31,6 +32,17 @@ Behavior:
 Prefer minimal, correct changes. Use run_shell for immediate commands; use propose_changes commands for steps that should run together after a file diff is accepted.`;
 
 const AGENT_TURN_TIMEOUT_MS = Number(process.env.BLANK_CLOUD_AGENT_TIMEOUT_MS) || 15 * 60 * 1000;
+const AGENT_FIRST_RESPONSE_MS =
+  Number(process.env.BLANK_CLOUD_AGENT_FIRST_RESPONSE_MS) || 60 * 1000;
+
+const FIRST_PROGRESS_CHUNK_TYPES = new Set([
+  "text-delta",
+  "reasoning",
+  "tool-call",
+  "tool-result",
+  "step-finish",
+  "finish",
+]);
 
 function agentStreamingEnabled(): boolean {
   const raw = process.env.BLANK_CLOUD_AGENT_STREAM?.trim().toLowerCase();
@@ -64,6 +76,7 @@ function buildTools(taskId: string) {
         path: z.string().describe('Directory path, use "." for workspace root'),
       }),
       execute: async ({ path: dirPath }) => {
+        logAgentTask(taskId, "Tool list_directory", { path: dirPath });
         emit(taskId, "tool", `Listed files in ${displayPath(dirPath)}`, {
           tool: "list_directory",
           path: dirPath,
@@ -83,6 +96,7 @@ function buildTools(taskId: string) {
         path: z.string(),
       }),
       execute: async ({ path: filePath }) => {
+        logAgentTask(taskId, "Tool read_file", { path: filePath });
         emit(taskId, "tool", `Read file ${displayPath(filePath)}`, {
           tool: "read_file",
           path: filePath,
@@ -110,6 +124,10 @@ function buildTools(taskId: string) {
         commands: z.array(z.string()).default([]),
       }),
       execute: async ({ summary, files, commands }) => {
+        logAgentTask(taskId, "Tool propose_changes", {
+          summary,
+          fileCount: files.length,
+        });
         emit(taskId, "tool", `Proposed changes (${files.length} file(s))`, {
           tool: "propose_changes",
           summary,
@@ -191,10 +209,14 @@ async function finishAgentTurn(taskId: string): Promise<void> {
   emit(taskId, "done", "Run finished", { status: "completed" });
 }
 
-function withAgentTimeout<T>(promise: Promise<T>): Promise<T> {
+function withAgentTimeout<T>(promise: Promise<T>, label = "Agent"): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`Agent timed out after ${Math.round(AGENT_TURN_TIMEOUT_MS / 60000)} minutes`));
+      reject(
+        new Error(
+          `${label} timed out after ${Math.round(AGENT_TURN_TIMEOUT_MS / 60000)} minutes`,
+        ),
+      );
     }, AGENT_TURN_TIMEOUT_MS);
     promise.then(
       (v) => {
@@ -209,18 +231,77 @@ function withAgentTimeout<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
-async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void> {
-  let streamId = randomUUID();
-  let segmentText = "";
-  let step = 0;
+function createFirstProgressWaiter(taskId: string, mode: "stream" | "batch") {
+  let settled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let resolveFn: () => void = () => {};
 
-  const result = streamText({
+  const promise = new Promise<void>((resolve, reject) => {
+    resolveFn = resolve;
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const seconds = Math.round(AGENT_FIRST_RESPONSE_MS / 1000);
+      reject(
+        new Error(
+          `No model response within ${seconds}s (${mode} mode). Check provider/model, API key, and try BLANK_CLOUD_AGENT_STREAM=0.`,
+        ),
+      );
+    }, AGENT_FIRST_RESPONSE_MS);
+  });
+
+  const signal = (reason: string) => {
+    if (settled) return;
+    settled = true;
+    if (timer) clearTimeout(timer);
+    logAgentTask(taskId, `First model progress (${mode}): ${reason}`);
+    resolveFn();
+  };
+
+  return { promise, signal };
+}
+
+function buildAgentGenerateOptions(
+  taskId: string,
+  task: TaskRecord,
+  stepRef: { value: number },
+  signalFirst: (reason: string) => void,
+) {
+  return {
     model: createLanguageModel(),
     system: SYSTEM,
     messages: modelMessages(task),
     maxSteps: 16,
+    toolCallStreaming: false,
     tools: buildTools(taskId),
+    onStepFinish: (stepResult: { toolCalls?: unknown[]; text?: string }) => {
+      stepRef.value += 1;
+      const step = stepRef.value;
+      emitStepProgress(taskId, step);
+      logAgentTask(taskId, `Step ${step} finished`, {
+        toolCalls: stepResult.toolCalls?.length ?? 0,
+        textChars: stepResult.text?.length ?? 0,
+      });
+      signalFirst(`step-${step}`);
+    },
+  };
+}
+
+async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void> {
+  let streamId = randomUUID();
+  let segmentText = "";
+  const stepRef = { value: 0 };
+  const first = createFirstProgressWaiter(taskId, "stream");
+  const base = buildAgentGenerateOptions(taskId, task, stepRef, first.signal);
+
+  logAgentTask(taskId, "Starting streaming agent turn");
+
+  const result = streamText({
+    ...base,
     onChunk: ({ chunk }) => {
+      if (FIRST_PROGRESS_CHUNK_TYPES.has(chunk.type)) {
+        first.signal(chunk.type);
+      }
       if (chunk.type !== "text-delta") {
         return;
       }
@@ -233,9 +314,8 @@ async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void>
         { persist: false },
       );
     },
-    onStepFinish: () => {
-      step += 1;
-      emitStepProgress(taskId, step);
+    onStepFinish: (stepResult) => {
+      base.onStepFinish(stepResult);
       const trimmed = segmentText.trim();
       if (trimmed) {
         appendTaskMessage(taskId, "assistant", trimmed, true);
@@ -243,27 +323,29 @@ async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void>
       segmentText = "";
       streamId = randomUUID();
     },
+    onError: ({ error }) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logAgentTask(taskId, "Model stream error", { error: message });
+    },
   });
 
-  await withAgentTimeout(result.text);
+  void result.consumeStream();
+  await Promise.race([first.promise, result.text]);
+  await withAgentTimeout(result.text, "Streaming agent");
   await finishAgentTurn(taskId);
 }
 
 async function runBatchTurn(taskId: string, task: TaskRecord): Promise<void> {
-  let step = 0;
-  const result = await withAgentTimeout(
-    generateText({
-      model: createLanguageModel(),
-      system: SYSTEM,
-      messages: modelMessages(task),
-      maxSteps: 16,
-      tools: buildTools(taskId),
-      onStepFinish: () => {
-        step += 1;
-        emitStepProgress(taskId, step);
-      },
-    }),
+  const stepRef = { value: 0 };
+  const first = createFirstProgressWaiter(taskId, "batch");
+  logAgentTask(taskId, "Starting batch agent turn (generateText)");
+
+  const generatePromise = generateText(
+    buildAgentGenerateOptions(taskId, task, stepRef, first.signal),
   );
+
+  await Promise.race([first.promise, generatePromise]);
+  const result = await withAgentTimeout(generatePromise, "Batch agent");
 
   const refreshed = getTask(taskId);
   if (refreshed?.pendingProposal) {
@@ -300,7 +382,12 @@ export async function runAgentTurn(taskId: string): Promise<void> {
       try {
         await runStreamingTurn(taskId, getTask(taskId)!);
       } catch (streamErr) {
+        const streamMessage =
+          streamErr instanceof Error ? streamErr.message : String(streamErr);
         rollbackMessagesSince(taskId, messageCountAtStart);
+        logAgentTask(taskId, "Streaming failed — retrying in batch mode", {
+          error: streamMessage,
+        });
         emit(
           taskId,
           "log",
@@ -317,6 +404,7 @@ export async function runAgentTurn(taskId: string): Promise<void> {
     }
   } catch (err) {
     const message = formatAgentError(err, { provider: getRuntimeSettings().provider });
+    logAgentTask(taskId, "Agent turn failed", { error: message });
     updateTask(taskId, { status: "failed", lastError: message });
     emit(taskId, "status", "Failed", { status: "failed" });
     emit(taskId, "error", message, { status: "failed" });

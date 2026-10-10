@@ -302,6 +302,41 @@ curl -s -X PATCH http://localhost:8787/settings \
   -d '{"provider":"anthropic","model":"claude-sonnet-4-20250514","apiKey":"sk-..."}' | jq
 ```
 
+## Grok Bot (OpenAI-compatible API)
+
+Use **Grok Bot** (or any OpenAI-compatible desktop client) to talk to the same **blank-cloud coding agent** as the Web UI — not the xAI Grok chat API. Configure your LLM in Web UI → **Model** (e.g. **Grok** with `XAI_API_KEY`) first; the `/v1` API only forwards chat to that agent.
+
+1. In `.env` next to `docker-compose.yml`:
+
+```bash
+BLANK_CLOUD_API_KEY=choose-a-long-random-secret
+# Required when you use Connect GitHub (per-user workspaces):
+BLANK_CLOUD_API_GITHUB_LOGIN=your-github-username
+```
+
+2. Restart: `docker compose up -d --build`
+3. In Grok Bot, add a **custom OpenAI-compatible** model:
+
+| Field | Value |
+|--------|--------|
+| Base URL | `http://YOUR_NAS_IP:8787/v1` |
+| API key | same as `BLANK_CLOUD_API_KEY` |
+| Model | `blank-cloud-agent` |
+
+4. Sign in on the Web UI, pick a repo, and save model settings once. Approve file changes in the Web UI after the agent proposes them (Grok Bot only receives the chat reply).
+
+```bash
+curl -s http://localhost:8787/v1/models \
+  -H "Authorization: Bearer $BLANK_CLOUD_API_KEY" | jq
+
+curl -s http://localhost:8787/v1/chat/completions \
+  -H "Authorization: Bearer $BLANK_CLOUD_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"blank-cloud-agent","stream":false,"messages":[{"role":"user","content":"List files in the project root"}]}' | jq
+```
+
+Streaming (`stream: true`) is not supported on `/v1/chat/completions` yet.
+
 ## Agent workflow
 
 1. **POST /tasks** with a natural-language task.
@@ -343,6 +378,8 @@ curl -s -X PATCH http://localhost:8787/settings \
 | `POST` | `/tasks/:id/approve` | Apply pending proposal and run its commands |
 | `POST` | `/tasks/:id/undo` | Undo last applied proposal |
 | `GET` | `/tasks/:id/stream` | Server-Sent Events log stream |
+| `GET` | `/v1/models` | OpenAI-compatible model list (needs `BLANK_CLOUD_API_KEY`) |
+| `POST` | `/v1/chat/completions` | Run one agent turn; `stream: false` only |
 
 ### Example session
 
@@ -406,7 +443,7 @@ WORKSPACE=./project npm run dev
 
 - The agent runs shell commands inside the container on the mounted project: **immediately** via `run_shell` during a task, and **after you Accept** when attached to a proposal. Set `BLANK_CLOUD_AGENT_SHELL=0` in `.env` to disable live shell. Obvious host-wide destructive patterns (e.g. `rm -rf /`) are blocked.
 - Mount only repositories you trust. Path operations are constrained to `/workspace`.
-- Expose port `8787` only on trusted networks; there is no built-in auth.
+- Expose port `8787` only on trusted networks. Web UI routes use GitHub sign-in; the optional `/v1` API uses `BLANK_CLOUD_API_KEY` (Bearer token). Anyone with that key can run the agent on your workspace.
 
 ## License
 

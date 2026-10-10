@@ -262,6 +262,10 @@ export function persistAppSettings(settings: AppSettings): void {
   });
 }
 
+function trimOrEmpty(value: string | undefined | null): string {
+  return (value ?? "").trim();
+}
+
 export function updateAppSettings(
   partial: Partial<Omit<AppSettings, "keys" | "repo" | "update">> & {
     keys?: Partial<ProviderKeys>;
@@ -270,23 +274,34 @@ export function updateAppSettings(
   },
 ): AppSettings {
   const current = loadAppSettings();
+  const topLevel: Partial<AppSettings> = {};
+  if (partial.provider !== undefined) {
+    topLevel.provider = partial.provider;
+  }
+  if (partial.model !== undefined) {
+    topLevel.model = partial.model;
+  }
+  if (partial.customBaseUrl !== undefined) {
+    topLevel.customBaseUrl = partial.customBaseUrl;
+  }
+
   const next: AppSettings = {
     ...current,
-    ...partial,
+    ...topLevel,
     keys: { ...current.keys, ...(partial.keys ?? {}) },
     repo: { ...current.repo, ...(partial.repo ?? {}) },
     update: { ...current.update, ...(partial.update ?? {}) },
   };
+
+  next.customBaseUrl = trimOrEmpty(next.customBaseUrl);
+
   if (partial.model?.trim()) {
     next.model = partial.model.trim();
   } else if (partial.provider && partial.provider !== current.provider) {
     next.model = DEFAULT_MODELS[partial.provider];
   }
-  if (partial.provider === "nim" && !next.customBaseUrl.trim()) {
+  if (next.provider === "nim" && !next.customBaseUrl) {
     next.customBaseUrl = DEFAULT_NIM_BASE_URL;
-  }
-  if (partial.customBaseUrl !== undefined) {
-    next.customBaseUrl = partial.customBaseUrl.trim();
   }
   persistAppSettings(next);
   return next;

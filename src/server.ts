@@ -18,6 +18,8 @@ import { updateRoutes } from "./routes/update.js";
 import { previewRoutes } from "./routes/preview.js";
 import { BUILD_INFO } from "./build-info.generated.js";
 import { startAutoUpdateScheduler } from "./update/service.js";
+import { openAiCompatRoutes } from "./openai-compat/routes.js";
+import { isOpenAiCompatEnabled } from "./openai-compat/auth.js";
 
 ensureWorkspace();
 ensureDataDir();
@@ -50,9 +52,10 @@ app.get("/health", (c) => {
   const runtime = getRuntimeSettings();
   return c.json({
     ok: true,
-    version: appVersion.version ?? "0.0.0",
+    version: BUILD_INFO.version || appVersion.version || "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "0.4.1",
+    ui: "0.4.3",
+    openaiCompat: isOpenAiCompatEnabled(),
     workspace: getWorkspaceRoot(),
     llm: {
       provider: runtime.provider,
@@ -75,6 +78,7 @@ app.route("/tasks", taskRoutes);
 app.use("/preview", requireGitHubSignIn);
 app.use("/preview/*", requireGitHubSignIn);
 app.route("/preview", previewRoutes);
+app.route("/v1", openAiCompatRoutes);
 
 app.get("/", serveStatic({ root: publicRoot, path: "index.html" }));
 app.get(
@@ -96,6 +100,7 @@ app.get("/api", (c) =>
       update: "/update",
       repo: "/repo",
       tasks: "/tasks",
+      openaiCompat: "/v1 (when BLANK_CLOUD_API_KEY is set)",
     },
   }),
 );
