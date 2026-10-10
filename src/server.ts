@@ -51,7 +51,7 @@ app.get("/health", (c) => {
     ok: true,
     version: appVersion.version ?? "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "0.3.2",
+    ui: "0.3.3",
     workspace: getWorkspaceRoot(),
     llm: {
       provider: runtime.provider,

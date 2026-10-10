@@ -249,11 +249,20 @@ function addToolRow(text, data) {
   scrollThread();
 }
 
+function repoSyncRecoveryHint(message) {
+  const m = String(message ?? "");
+  if (!m.includes("origin/main") && !m.includes("HTTP 400") && !m.includes("checkout -B")) {
+    return m;
+  }
+  return `${m}\n\nUpdate blank-cloud on the NAS (SSH), then pick the repo again:\ncurl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/cursor/ui-polish-d75c/scripts/recover-from-github.sh | bash -s ~/blank-cloud\ncd ~/blank-cloud && docker compose up -d --build`;
+}
+
 function addSystemNote(text) {
   const el = document.createElement("div");
   el.className = "system-note";
   el.textContent = text;
   $("chat-thread").appendChild(el);
+  updateEmptyState();
   scrollThread();
 }
 
@@ -881,7 +890,7 @@ async function selectGitHubRepo(fullName) {
     await loadRepo();
     addSystemNote(`Workspace ready: ${fullName} (${res.selected?.branch})`);
   } catch (e) {
-    addSystemNote(e.message);
+    addSystemNote(repoSyncRecoveryHint(e.message));
     await loadRepo();
   }
 }

@@ -60,6 +60,21 @@ export function sanitizeGitSecrets(text: string): string {
     .replace(/\bgho_[A-Za-z0-9]+\b/g, "gho_***");
 }
 
+function friendlyGitSyncError(sanitized: string): string | null {
+  if (
+    /origin\/[\w./-]+.*is not a commit/i.test(sanitized) ||
+    /checkout -B\s+\S+\s+origin\//i.test(sanitized)
+  ) {
+    return (
+      "Repository sync failed: git fetch did not create the remote branch ref (common on NAS when GitHub returns HTTP 400). " +
+      "Update blank-cloud on the host, then pick the repo again:\n" +
+      "curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/cursor/ui-polish-d75c/scripts/recover-from-github.sh | bash -s ~/blank-cloud\n" +
+      "cd ~/blank-cloud && docker compose up -d --build"
+    );
+  }
+  return null;
+}
+
 function friendlyGitHubCloneError(sanitized: string): string | null {
   const lower = sanitized.toLowerCase();
   if (
@@ -78,7 +93,8 @@ function friendlyGitHubCloneError(sanitized: string): string | null {
 function rethrowGitError(err: unknown): never {
   const raw = err instanceof Error ? err.message : String(err);
   const sanitized = sanitizeGitSecrets(raw);
-  const friendly = friendlyGitHubCloneError(sanitized);
+  const friendly =
+    friendlyGitSyncError(sanitized) ?? friendlyGitHubCloneError(sanitized);
   throw new Error(friendly ?? sanitized);
 }
 
@@ -101,6 +117,40 @@ async function runGit(
 function isEmptyDir(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
   return fs.readdirSync(dir).length === 0;
+}
+
+async function fetchOriginBranch(
+  cwd: string,
+  branch: string,
+  remoteUrl: string,
+  token: string,
+): Promise<void> {
+  try {
+    await runGit(cwd, ["fetch", "origin", branch]);
+    const check = await runGit(cwd, ["rev-parse", "--verify", `refs/remotes/origin/${branch}`]);
+    if (check.stdout.trim()) return;
+  } catch {
+    /* fall through to ls-remote */
+  }
+
+  const lsRemoteUrl = authedCloneUrl(remoteUrl, token);
+  let sha = "";
+  try {
+    const res = await runGit(cwd, ["ls-remote", lsRemoteUrl, `refs/heads/${branch}`]);
+    sha = res.stdout.trim().split(/\s+/)[0] ?? "";
+  } catch {
+    throw new Error(
+      `Could not reach GitHub to fetch branch "${branch}". Check network/DNS on the NAS and your GitHub token.`,
+    );
+  }
+  if (!sha) {
+    throw new Error(`Branch "${branch}" was not found on the remote repository.`);
+  }
+  try {
+    await runGit(cwd, ["fetch", "origin", sha]);
+  } catch {
+    await runGit(cwd, ["fetch", lsRemoteUrl, sha]);
+  }
 }
 
 /** Checkout local branch at the commit pointed to by origin/<branch> (never use origin/branch as checkout target). */
@@ -132,7 +182,7 @@ export async function syncRepository(
 
   const gitDir = path.join(workspaceRoot, ".git");
   if (fs.existsSync(gitDir)) {
-    await runGit(workspaceRoot, ["fetch", "origin", branch]);
+    await fetchOriginBranch(workspaceRoot, branch, remoteUrl, repo.gitToken);
     await runGit(workspaceRoot, ["checkout", branch]).catch(async () => {
       await checkoutRemoteBranch(workspaceRoot, branch);
     });
