@@ -249,12 +249,21 @@ function addToolRow(text, data) {
   scrollThread();
 }
 
-function repoSyncRecoveryHint(message) {
+function showRepoSyncRecovery(message) {
   const m = String(message ?? "");
-  if (!m.includes("origin/main") && !m.includes("HTTP 400") && !m.includes("checkout -B")) {
-    return m;
-  }
-  return `${m}\n\nUpdate blank-cloud on the NAS (SSH), then pick the repo again:\ncurl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/cursor/ui-polish-d75c/scripts/recover-from-github.sh | bash -s ~/blank-cloud\ncd ~/blank-cloud && docker compose up -d --build`;
+  const gitish =
+    m.includes("origin/main") ||
+    m.includes("HTTP 400") ||
+    m.includes("checkout -B") ||
+    m.includes("missing after fetch");
+  addSystemNote(m);
+  if (!gitish) return;
+  addSystemNote(
+    "NAS: curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/main/scripts/nas-fix.sh | bash",
+  );
+  addSystemNote(
+    "Then hard-refresh the browser and pick the repo again. If needed, clear the workspace git metadata (replace USER with your GitHub login): docker compose exec blank-cloud rm -rf /app/data/workspaces/USER/.git",
+  );
 }
 
 function addSystemNote(text) {
@@ -890,7 +899,7 @@ async function selectGitHubRepo(fullName) {
     await loadRepo();
     addSystemNote(`Workspace ready: ${fullName} (${res.selected?.branch})`);
   } catch (e) {
-    addSystemNote(repoSyncRecoveryHint(e.message));
+    showRepoSyncRecovery(e.message);
     await loadRepo();
   }
 }
