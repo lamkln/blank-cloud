@@ -244,6 +244,7 @@ repo.post("/github/select", async (c) => {
   const git = await getGitStatus(root);
   return c.json({
     ok: true,
+    workspaceRoot: root,
     selected: { fullName, branch, remoteUrl },
     sync: syncResult,
     configured: maskedRepo(settings),

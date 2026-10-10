@@ -1,8 +1,8 @@
 import { createTask, getTask } from "../tasks/store.js";
 import { runAgentTurn } from "../tasks/agent.js";
-import { isWorkspaceReady } from "../repo/git.js";
+import { isWorkspaceReady, syncRepository } from "../repo/git.js";
 import { getWorkspaceRoot } from "../config.js";
-import { usesActiveRemoteRepo } from "../repo/runtime.js";
+import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
 import { runWithUserContext } from "../context/request.js";
 import { buildUserContext } from "../auth/middleware.js";
 import { loadUser } from "../auth/users.js";
@@ -64,13 +64,37 @@ function formatAgentReply(taskId: string): string {
   return text.trim() || "(No assistant reply — check blank-cloud Web UI for tool output.)";
 }
 
-async function runAgentOnce(prompt: string): Promise<string> {
+async function ensureAgentWorkspace(): Promise<string> {
   const root = getWorkspaceRoot();
-  if (!isWorkspaceReady(root, remoteConfiguredForOpenAi() || usesActiveRemoteRepo())) {
-    throw new Error(
-      "Workspace not ready — connect GitHub and select a repo in blank-cloud Web UI first.",
-    );
+  const remoteOn = remoteConfiguredForOpenAi() || usesActiveRemoteRepo();
+  if (!remoteOn) {
+    if (!isWorkspaceReady(root, false)) {
+      throw new Error(`Workspace path missing: ${root}`);
+    }
+    return root;
   }
+  if (!isWorkspaceReady(root, true)) {
+    const repo = activeRepoSettings();
+    const remoteUrl =
+      repo.remoteUrl.trim() ||
+      (repo.githubRepoFullName.trim()
+        ? `https://github.com/${repo.githubRepoFullName.trim()}.git`
+        : "");
+    if (!remoteUrl || !repo.gitToken.trim()) {
+      throw new Error(
+        `Workspace not ready at ${root} — connect GitHub and select a repo in the Web UI (not WORKSPACE mount).`,
+      );
+    }
+    await syncRepository(root, { ...repo, remoteUrl });
+  }
+  if (!isWorkspaceReady(root, true)) {
+    throw new Error(`Workspace not ready at ${root} after git sync.`);
+  }
+  return root;
+}
+
+async function runAgentOnce(prompt: string): Promise<string> {
+  const root = await ensureAgentWorkspace();
   const owner = openAiCompatGithubLogin();
   const task = createTask(prompt, owner);
   await runAgentTurn(task.id);

@@ -43,6 +43,7 @@ export function createLanguageModel(): LanguageModel {
       const xai = createOpenAI({
         apiKey: requireKey(getProviderApiKey("grok")),
         baseURL: DEFAULT_GROK_BASE_URL.replace(/\/$/, ""),
+        compatibility: "compatible",
       });
       return xai(model);
     }
@@ -62,6 +63,7 @@ export function createLanguageModel(): LanguageModel {
       const nim = createOpenAI({
         apiKey: requireKey(getProviderApiKey("nim")),
         baseURL: getNimBaseUrl(settings).replace(/\/$/, ""),
+        compatibility: "compatible",
       });
       return nim(model);
     }
@@ -73,6 +75,7 @@ export function createLanguageModel(): LanguageModel {
       const openai = createOpenAI({
         apiKey: requireKey(getProviderApiKey("custom")),
         baseURL: base.replace(/\/$/, ""),
+        compatibility: "compatible",
       });
       return openai(model);
     }
