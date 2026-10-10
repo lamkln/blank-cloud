@@ -33,7 +33,11 @@ Prefer minimal, correct changes. Use run_shell for immediate commands; use propo
 const AGENT_TURN_TIMEOUT_MS = Number(process.env.BLANK_CLOUD_AGENT_TIMEOUT_MS) || 15 * 60 * 1000;
 
 function agentStreamingEnabled(): boolean {
-  return process.env.BLANK_CLOUD_AGENT_STREAM === "1";
+  const raw = process.env.BLANK_CLOUD_AGENT_STREAM?.trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "off") {
+    return false;
+  }
+  return true;
 }
 
 function modelMessages(task: TaskRecord) {

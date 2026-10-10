@@ -300,6 +300,17 @@ textarea {
   color: var(--danger, #f07070);
 }
 
+.repo-status.syncing {
+  color: var(--accent);
+  animation: pulse-text 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-text {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .repo-status.ok {
   color: var(--success, #6bcf7f);
 }
