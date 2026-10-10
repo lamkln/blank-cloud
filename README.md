@@ -66,6 +66,17 @@ From your PC: `curl -m 5 http://192.168.x.x:8787/health` (replace with real NAS 
 cd ~/blank-cloud && bash scripts/update.sh
 ```
 
+**`git checkout -B main origin/main` / HTTP 400** — fetch did not create `origin/main` (network, or update ran inside the container without GitHub access). On the **NAS host**:
+
+```bash
+cd ~/blank-cloud
+git fetch origin main
+git checkout -B main "$(git rev-parse origin/main)"
+bash scripts/update.sh
+```
+
+If `git fetch` fails, test: `curl -I https://github.com` and fix DNS/firewall on the host.
+
 Hard refresh the browser after the container restarts.
 
 **Manifest / custom OpenAI-compatible gateway** (e.g. `https://app.manifest.build/v1`):

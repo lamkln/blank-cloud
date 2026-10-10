@@ -29,9 +29,13 @@ mkdir -p "$(dirname "$INSTALL_DIR")"
 install_or_update_repo() {
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
     echo "Updating ${INSTALL_DIR} ..."
-    git -C "$INSTALL_DIR" fetch origin "$REF"
-    git -C "$INSTALL_DIR" checkout "$REF" 2>/dev/null || git -C "$INSTALL_DIR" checkout "origin/${REF}"
-    git -C "$INSTALL_DIR" pull --ff-only origin "$REF" 2>/dev/null || true
+    if [[ -x "${INSTALL_DIR}/scripts/git-pull.sh" ]]; then
+      BLANK_CLOUD_INSTALL_DIR="${INSTALL_DIR}" BLANK_CLOUD_REF="${REF}" \
+        bash "${INSTALL_DIR}/scripts/git-pull.sh"
+    else
+      git -C "$INSTALL_DIR" fetch origin "$REF"
+      git -C "$INSTALL_DIR" checkout -B "$REF" "$(git -C "$INSTALL_DIR" rev-parse "origin/${REF}")"
+    fi
     return
   fi
 
