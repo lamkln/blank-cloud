@@ -66,16 +66,25 @@ From your PC: `curl -m 5 http://192.168.x.x:8787/health` (replace with real NAS 
 cd ~/blank-cloud && bash scripts/update.sh
 ```
 
-**`git checkout -B main origin/main` / HTTP 400** — fetch did not create `origin/main` (network, or update ran inside the container without GitHub access). On the **NAS host**:
+**`git checkout -B main origin/main` / HTTP 400** — do **not** use `origin/main` as the checkout target. On the **NAS host**, reset by commit SHA (works even when `origin/main` is broken):
 
 ```bash
 cd ~/blank-cloud
-git fetch origin main
-git checkout -B main "$(git rev-parse origin/main)"
-bash scripts/update.sh
+curl -fsSL https://raw.githubusercontent.com/lamkln/blank-cloud/cursor/ui-polish-d75c/scripts/recover-from-github.sh | bash -s ~/blank-cloud
+docker compose up -d --build
 ```
 
-If `git fetch` fails, test: `curl -I https://github.com` and fix DNS/firewall on the host.
+Or manually:
+
+```bash
+cd ~/blank-cloud
+SHA=$(git ls-remote https://github.com/lamkln/blank-cloud.git refs/heads/main | awk '{print $1}')
+git fetch https://github.com/lamkln/blank-cloud.git "$SHA"
+git checkout -B main "$SHA"
+docker compose up -d --build
+```
+
+If `git ls-remote` fails, test: `curl -I https://github.com` and fix DNS/firewall on the host.
 
 Hard refresh the browser after the container restarts.
 

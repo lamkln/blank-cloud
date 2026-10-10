@@ -103,6 +103,22 @@ function isEmptyDir(dir: string): boolean {
   return fs.readdirSync(dir).length === 0;
 }
 
+/** Checkout local branch at the commit pointed to by origin/<branch> (never use origin/branch as checkout target). */
+async function checkoutRemoteBranch(cwd: string, branch: string): Promise<void> {
+  const remoteRef = `refs/remotes/origin/${branch}`;
+  let commit = "";
+  try {
+    const res = await runGit(cwd, ["rev-parse", "--verify", remoteRef]);
+    commit = res.stdout.trim();
+  } catch {
+    throw new Error(
+      `origin/${branch} is missing after fetch (network error or empty remote). ` +
+        `Try again or run: git -C "${cwd}" fetch origin ${branch}`,
+    );
+  }
+  await runGit(cwd, ["checkout", "-B", branch, commit]);
+}
+
 export async function syncRepository(
   workspaceRoot: string,
   repo: RepoSettings,
@@ -118,7 +134,7 @@ export async function syncRepository(
   if (fs.existsSync(gitDir)) {
     await runGit(workspaceRoot, ["fetch", "origin", branch]);
     await runGit(workspaceRoot, ["checkout", branch]).catch(async () => {
-      await runGit(workspaceRoot, ["checkout", "-B", branch, `origin/${branch}`]);
+      await checkoutRemoteBranch(workspaceRoot, branch);
     });
     await runGit(workspaceRoot, ["pull", "--ff-only", "origin", branch]).catch(async () => {
       await runGit(workspaceRoot, ["pull", "origin", branch]);
@@ -168,7 +184,7 @@ async function shallowCloneWithBranch(
     }
     await runGit(cwd, ["clone", "--depth", "1", cloneUrl, workspaceRoot]);
     await runGit(workspaceRoot, ["checkout", branch]).catch(async () => {
-      await runGit(workspaceRoot, ["checkout", "-B", branch, `origin/${branch}`]);
+      await checkoutRemoteBranch(workspaceRoot, branch);
     });
   }
 }
