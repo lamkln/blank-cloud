@@ -5,8 +5,12 @@ import {
   injectHtmlBaseHref,
   listPreviewCandidates,
   previewFileBaseUrl,
+  STARTER_INDEX_HTML,
+  STARTER_STYLES_CSS,
 } from "../preview/candidates.js";
 import { previewScopeOrResponse } from "../preview/guard.js";
+import { previewErrorPage } from "../preview/html.js";
+import { writeWorkspaceFile } from "../workspace/paths.js";
 import { isPreviewHtmlType, previewContentType } from "../preview/mime.js";
 import { resolveWorkspacePath, WorkspacePathError } from "../workspace/paths.js";
 
@@ -51,7 +55,8 @@ preview.get("/check", (c) => {
         const snippet = fs.readFileSync(abs, "utf8").slice(0, 8000);
         const body = snippet.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? snippet;
         const visible = body.replace(/<[^>]+>/g, "").trim();
-        empty = visible.length < 2;
+        const hasScript = /<script/i.test(snippet);
+        empty = visible.length < 2 && !hasScript;
       }
     }
   } catch {
@@ -79,9 +84,50 @@ function relativePreviewPath(c: { req: { path: string } }): string {
   return "index.html";
 }
 
+function iframeDest(c: { req: { header: (n: string) => string | undefined } }): boolean {
+  const dest = c.req.header("sec-fetch-dest");
+  return dest === "iframe" || dest === "document";
+}
+
+preview.post("/scaffold", async (c) => {
+  const scope = previewScopeOrResponse(c);
+  if (scope instanceof Response) {
+    return scope;
+  }
+  const indexPath = "index.html";
+  const cssPath = "styles.css";
+  const indexAbs = resolveWorkspacePath(indexPath, scope.root);
+  if (fs.existsSync(indexAbs)) {
+    return c.json(
+      { error: "index.html already exists — open it in Preview or delete it to use Starter page." },
+      409,
+    );
+  }
+  writeWorkspaceFile(indexPath, STARTER_INDEX_HTML);
+  writeWorkspaceFile(cssPath, STARTER_STYLES_CSS);
+  return c.json({
+    ok: true,
+    paths: [indexPath, cssPath],
+    previewUrl: `/preview/file/${indexPath}`,
+  });
+});
+
 preview.get("/file/*", async (c) => {
   const scope = previewScopeOrResponse(c);
   if (scope instanceof Response) {
+    if (iframeDest(c)) {
+      let message = "Sign in and select your GitHub repo in Workspace, then try Preview again.";
+      try {
+        const clone = scope.clone();
+        const data = (await clone.json()) as { error?: string };
+        if (data.error) message = data.error;
+      } catch {
+        /* keep default */
+      }
+      return c.body(previewErrorPage("Preview unavailable", message), 401, {
+        "Content-Type": "text/html; charset=utf-8",
+      });
+    }
     return scope;
   }
   const { root } = scope;
@@ -96,6 +142,16 @@ preview.get("/file/*", async (c) => {
   }
 
   if (!fs.existsSync(abs)) {
+    if (iframeDest(c)) {
+      return c.body(
+        previewErrorPage(
+          "File not found",
+          `${relative} is not in this repo yet. Use chat to build the page, Accept changes, or click Starter page in Preview.`,
+        ),
+        404,
+        { "Content-Type": "text/html; charset=utf-8" },
+      );
+    }
     return c.text("Not found", 404);
   }
   const stat = fs.statSync(abs);

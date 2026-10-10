@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="icon" type="image/png" sizes="32x32" href="/ui/favicon-32.png" />
     <link rel="apple-touch-icon" href="/ui/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/ui/styles.css?v=0.3.6" />
+    <link rel="stylesheet" href="/ui/styles.css?v=0.4.0" />
   </head>
   <body class="owui">
     <div class="app" id="app-root">
@@ -196,10 +196,12 @@
           <div class="preview-toolbar">
             <label class="field field-inline">
               <span>Path</span>
-              <input id="preview-path" type="text" spellcheck="false" autocomplete="off" placeholder="index.html" />
+              <input id="preview-path" type="text" list="preview-path-list" spellcheck="false" autocomplete="off" placeholder="index.html" />
+              <datalist id="preview-path-list"></datalist>
             </label>
             <button type="button" class="btn btn-sm btn-primary" id="preview-refresh">Refresh</button>
             <button type="button" class="btn btn-sm" id="preview-new-tab">Open tab</button>
+            <button type="button" class="btn btn-sm btn-accent" id="preview-scaffold">Starter page</button>
           </div>
           <p class="fine-print preview-hint" id="preview-hint">
             Static files from the repository you selected in Workspace (not blank-cloud itself).
@@ -284,7 +286,7 @@
       </div>
     </div>
 
-    <script src="/ui/markdown.js?v=0.3.6"></script>
-    <script src="/ui/app.js?v=0.3.6" type="module"></script>
+    <script src="/ui/markdown.js?v=0.4.0"></script>
+    <script src="/ui/app.js?v=0.4.0" type="module"></script>
   </body>
 </html>
