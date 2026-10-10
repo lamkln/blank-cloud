@@ -1,15 +1,13 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { getWorkspaceRoot } from "../config.js";
-import { commitAndPush, isWorkspaceReady } from "../repo/git.js";
-import {
-  buildFailureContinuationUserMessage,
-  buildRejectionUserMessage,
-  runAgentTurn,
-} from "../tasks/agent.js";
-import { applyProposal, undoLastApply } from "../tasks/proposals.js";
-import { runShellCommands } from "../tasks/runner.js";
-import { taskToJson } from "../tasks/serialize.js";
+import { isWorkspaceReady } from "../repo/git.js";
+import { buildRejectionUserMessage } from "../tasks/agent.js";
+import { approveTaskProposal } from "../tasks/approve-flow.js";
+import { requestTaskCancel } from "../tasks/cancel.js";
+import { undoLastApply } from "../tasks/proposals.js";
+import { taskProgressSummary, taskToJson } from "../tasks/serialize.js";
+import { runTaskOrchestrator } from "../tasks/orchestrator.js";
 import {
   appendTaskMessage,
   createTask,
@@ -21,10 +19,8 @@ import {
   updateTask,
 } from "../tasks/store.js";
 import { getRequestUser } from "../context/request.js";
-import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
+import { usesActiveRemoteRepo } from "../repo/runtime.js";
 import { isGitHubOAuthConfigured } from "../auth/github-oauth.js";
-
-import { updateUser } from "../auth/users.js";
 
 const tasks = new Hono();
 
@@ -53,7 +49,17 @@ tasks.get("/", (c) => {
 });
 
 tasks.post("/", async (c) => {
-  let body: { prompt?: string; message?: string };
+  let body: {
+    prompt?: string;
+    message?: string;
+    autoApprove?: boolean;
+    autoApproveRelaxRules?: boolean;
+    autoApproveAllowShell?: boolean;
+    referenceFiles?: string[];
+    template?: string;
+    wait?: boolean;
+    waitTimeoutMs?: number;
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -77,19 +83,85 @@ tasks.post("/", async (c) => {
     );
   }
 
-  const task = createTask(prompt, currentOwner());
-  queueMicrotask(() => {
-    void runAgentTurn(task.id);
+  const task = createTask(prompt, currentOwner(), {
+    autoApprove: body.autoApprove,
+    autoApproveRelaxRules: body.autoApproveRelaxRules,
+    autoApproveAllowShell: body.autoApproveAllowShell,
+    referenceFiles: body.referenceFiles,
+    template: body.template,
   });
+
+  const run = () => {
+    queueMicrotask(() => {
+      void runTaskOrchestrator(task.id);
+    });
+  };
+
+  if (body.wait) {
+    run();
+    const timeout = Math.min(Math.max(body.waitTimeoutMs ?? 600_000, 5_000), 900_000);
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const current = getTask(task.id);
+      if (
+        current &&
+        (current.status === "completed" ||
+          current.status === "failed" ||
+          current.status === "cancelled" ||
+          (current.status === "awaiting_approval" && !body.autoApprove))
+      ) {
+        break;
+      }
+      if (current?.status === "awaiting_approval" && body.autoApprove) {
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    const final = getTask(task.id);
+    return c.json(
+      {
+        ...taskToJson(final!),
+        stream: `/tasks/${task.id}/stream`,
+      },
+      201,
+    );
+  }
+
+  run();
 
   return c.json(
     {
       id: task.id,
       status: task.status,
+      progress: taskProgressSummary(task),
       stream: `/tasks/${task.id}/stream`,
     },
     201,
   );
+});
+
+tasks.get("/:id/wait", async (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  const timeout = Math.min(Number(c.req.query("timeoutMs") ?? "120000"), 900_000);
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const current = getTask(task.id);
+    if (
+      current &&
+      (current.status === "completed" ||
+        current.status === "failed" ||
+        current.status === "cancelled" ||
+        current.status === "awaiting_approval")
+    ) {
+      return c.json(taskToJson(current));
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return c.json({ ...taskToJson(getTask(task.id)!), timedOut: true }, 408);
 });
 
 tasks.get("/:id/events", (c) => {
@@ -133,7 +205,7 @@ tasks.post("/:id/message", async (c) => {
 
   appendTaskMessage(task.id, "user", message);
   queueMicrotask(() => {
-    void runAgentTurn(task.id);
+    void runTaskOrchestrator(task.id);
   });
 
   return c.json({ id: task.id, status: "running" });
@@ -161,7 +233,7 @@ tasks.post("/:id/reject", async (c) => {
 
   appendTaskMessage(task.id, "user", buildRejectionUserMessage(feedback));
   queueMicrotask(() => {
-    void runAgentTurn(task.id);
+    void runTaskOrchestrator(task.id);
   });
 
   return c.json({ id: task.id, status: "running" });
@@ -175,86 +247,42 @@ tasks.post("/:id/approve", async (c) => {
   if (!task.pendingProposal) {
     return c.json({ error: "No pending proposal to approve" }, 400);
   }
-
-  const proposal = { ...task.pendingProposal };
   try {
-    applyProposal(task.id);
+    const result = await approveTaskProposal(task.id, "user");
+    return c.json({ id: task.id, ...result });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return c.json({ error: message }, 400);
   }
+});
 
-  emit(task.id, "log", "Changes approved — applying to workspace");
-
-  const taskId = task.id;
-
-  async function maybePushAfterApply(): Promise<void> {
-    const repoSettings = activeRepoSettings();
-    if (!repoSettings.pushOnApprove || !usesActiveRemoteRepo()) return;
-    try {
-      const paths = proposal.files.map((f) => f.path);
-      const pushResult = await commitAndPush(
-        getWorkspaceRoot(),
-        repoSettings,
-        `blank-cloud: ${proposal.summary}`.slice(0, 200),
-        paths,
-      );
-      if (pushResult.pushed) {
-        emit(taskId, "log", `Pushed commit ${pushResult.commit} to origin`);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      emit(taskId, "log", `Git push skipped: ${msg}`);
-    }
+tasks.post("/:id/cancel", (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
   }
-
-  const commands = proposal.commands;
-  if (commands.length === 0) {
-    await maybePushAfterApply();
-    updateTask(task.id, { status: "completed" });
-    emit(task.id, "done", "Changes applied", { status: "completed" });
-    return c.json({ id: task.id, status: "completed", applied: true, commandsRun: [] });
-  }
-
-  const results = await runShellCommands(task.id, commands);
-  const failed = results.find((r) => r.exitCode !== 0 || r.timedOut);
-  const refreshed = getTask(task.id)!;
-
-  if (!failed) {
-    await maybePushAfterApply();
-  }
-
-  if (failed) {
-    const err = failed.timedOut
-      ? `Command timed out: ${failed.command}`
-      : `Command failed (${failed.exitCode}): ${failed.command}`;
-    updateTask(task.id, { status: "running", lastError: err });
-    emit(task.id, "error", err);
-    appendTaskMessage(
-      task.id,
-      "user",
-      buildFailureContinuationUserMessage(refreshed, err),
-    );
-    queueMicrotask(() => {
-      void runAgentTurn(task.id);
-    });
-    return c.json({
-      id: task.id,
-      status: "running",
-      applied: true,
-      commandsRun: results,
-    });
-  }
-
-  updateTask(task.id, { status: "completed" });
-  emit(task.id, "done", "Changes applied and commands succeeded", { status: "completed" });
-
-  return c.json({
-    id: task.id,
-    status: "completed",
-    applied: true,
-    commandsRun: results,
+  requestTaskCancel(task.id);
+  updateTask(task.id, {
+    status: "cancelled",
+    controls: { ...task.controls, cancelRequested: true },
   });
+  emit(task.id, "status", "Cancel requested", { status: "cancelled" });
+  return c.json({ id: task.id, status: "cancelled" });
+});
+
+tasks.post("/:id/retry", (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  if (task.status === "running" || task.status === "executing") {
+    return c.json({ error: "Task is still running" }, 409);
+  }
+  updateTask(task.id, { status: "running", lastError: null });
+  queueMicrotask(() => {
+    void runTaskOrchestrator(task.id);
+  });
+  return c.json({ id: task.id, status: "running" });
 });
 
 tasks.post("/:id/undo", (c) => {

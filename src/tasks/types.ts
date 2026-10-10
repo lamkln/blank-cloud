@@ -38,9 +38,11 @@ export interface TaskMessage {
 export type TaskEventType =
   | "message"
   | "message_delta"
+  | "reasoning_delta"
   | "log"
   | "tool"
   | "proposal"
+  | "plan"
   | "awaiting_approval"
   | "rejected"
   | "command_stdout"
@@ -50,7 +52,47 @@ export type TaskEventType =
   | "undone"
   | "status"
   | "error"
-  | "done";
+  | "done"
+  | "verify";
+
+export type PlanStepStatus = "pending" | "running" | "done" | "failed" | "skipped";
+
+export interface TaskPlanStep {
+  id: string;
+  title: string;
+  filesHint?: string;
+  status: PlanStepStatus;
+  summary?: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+}
+
+export interface TaskPlan {
+  steps: TaskPlanStep[];
+  currentStepIndex: number;
+  compactSummary: string;
+}
+
+export interface TaskRunOptions {
+  autoApprove?: boolean;
+  /** When true with autoApprove, ignore workspace newFilesOnly and pathPrefix. */
+  autoApproveRelaxRules?: boolean;
+  autoApproveAllowShell?: boolean;
+  referenceFiles?: string[];
+  template?: string;
+}
+
+export interface TaskRuntimeControls {
+  cancelRequested: boolean;
+  modelWaitStartedAt: string | null;
+  activeProvider: string | null;
+  activeModel: string | null;
+  currentPhase: string | null;
+  verifyAttempts: number;
+  lastAutoApproveReason: string | null;
+  filesWritten: number;
+}
 
 export interface TaskEvent {
   id: string;
@@ -75,6 +117,9 @@ export interface TaskRecord {
   iteration: number;
   /** GitHub login when per-user OAuth is enabled */
   ownerLogin: string | null;
+  plan: TaskPlan | null;
+  options: TaskRunOptions;
+  controls: TaskRuntimeControls;
 }
 
 export interface CreateTaskInput {

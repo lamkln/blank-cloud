@@ -89,6 +89,12 @@
           <div class="header-titles">
             <h1 id="run-title">New Chat</h1>
             <p id="run-meta" class="run-id" hidden></p>
+            <div id="agent-progress" class="agent-progress" hidden>
+              <span id="agent-progress-text" class="fine-print"></span>
+              <button type="button" class="btn btn-sm" id="cancel-task" hidden>Cancel</button>
+              <button type="button" class="btn btn-sm" id="retry-task" hidden>Retry</button>
+            </div>
+            <ol id="plan-steps" class="plan-steps" hidden></ol>
           </div>
           <div class="header-actions">
             <button type="button" class="btn btn-sm" id="preview-open" title="Preview site from workspace">
@@ -274,10 +280,31 @@
             <label class="field"><span>Custom OpenAI-compatible</span><input data-key="customApiKey" type="password" autocomplete="off" /></label>
           </details>
           <div class="settings-group">
+            <div class="settings-group-title">Agent</div>
+            <label class="field">
+              <span>First response timeout (seconds)</span>
+              <input id="agent-first-response-sec" type="number" min="5" max="600" />
+            </label>
+            <label class="field">
+              <span>Max files per plan step</span>
+              <input id="agent-max-files-step" type="number" min="1" max="20" />
+            </label>
+            <label class="field">
+              <span>Verify command (after accept)</span>
+              <input id="agent-verify-cmd" type="text" spellcheck="false" placeholder="./gradlew build" />
+            </label>
+            <label class="field checkbox-field">
+              <input id="agent-auto-approve" type="checkbox" />
+              <span>Auto-approve proposals (workspace default)</span>
+            </label>
+            <p class="fine-print" id="settings-active-hint"></p>
+          </div>
+          <div class="settings-group">
             <div class="settings-group-title">Actions</div>
             <div class="settings-actions">
               <button type="button" class="btn btn-sm btn-primary" id="save-settings">Save</button>
               <button type="button" class="btn btn-sm" id="test-settings">Test connection</button>
+              <button type="button" class="btn btn-sm" id="test-tools-settings">Test tools</button>
               <button type="button" class="btn btn-sm" id="load-grok-models" hidden>Load Grok models</button>
               <button type="button" class="btn btn-sm" id="load-nim-models" hidden>Load NIM models</button>
             </div>

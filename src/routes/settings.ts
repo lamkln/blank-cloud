@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { generateText, tool } from "ai";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { LlmProvider } from "../config.js";
@@ -6,12 +6,16 @@ import { getRuntimeSettings } from "../config.js";
 import { formatAgentError } from "../agent/errors.js";
 import { createLanguageModel } from "../providers/model.js";
 import {
+  getApiKeyForProvider,
   getNimBaseUrl,
   loadAppSettings,
+  maskSecret,
   maskedKeys,
   updateAppSettings,
   listProvidersPublic,
 } from "../settings/store.js";
+import { runWithModelFallback } from "../providers/fallback.js";
+import { proposeChangesArgsSchema } from "../tasks/tool-args.js";
 
 const settings = new Hono();
 
@@ -28,6 +32,30 @@ const keysSchema = z
   })
   .optional();
 
+const agentPatchSchema = z
+  .object({
+    firstResponseTimeoutSec: z.number().int().min(5).max(600).optional(),
+    maxFilesPerStep: z.number().int().min(1).max(20).optional(),
+    verifyCommand: z.string().optional(),
+    verifyMaxRetries: z.number().int().min(0).max(10).optional(),
+    verifyTimeoutSec: z.number().int().min(10).max(3600).optional(),
+    referenceFiles: z.array(z.string()).optional(),
+    instructionFiles: z.array(z.string()).optional(),
+    modelFallbacks: z.array(z.any()).optional(),
+    planningModel: z.any().nullable().optional(),
+    editModel: z.any().nullable().optional(),
+    settingsOverrideEnv: z.boolean().optional(),
+    autoApprove: z
+      .object({
+        enabled: z.boolean().optional(),
+        newFilesOnly: z.boolean().optional(),
+        pathPrefix: z.string().optional(),
+        allowShellCommands: z.boolean().optional(),
+      })
+      .optional(),
+  })
+  .optional();
+
 const patchSchema = z.object({
   provider: z
     .enum(["openai", "anthropic", "gemini", "groq", "grok", "openrouter", "nim", "custom"])
@@ -36,15 +64,35 @@ const patchSchema = z.object({
   customBaseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   keys: keysSchema,
+  agent: agentPatchSchema,
 });
+
+function resolvedBaseUrl(app: ReturnType<typeof loadAppSettings>): string | null {
+  if (app.provider === "nim") {
+    return getNimBaseUrl(app);
+  }
+  if (app.provider === "custom") {
+    return app.customBaseUrl.trim() || null;
+  }
+  if (app.provider === "grok") {
+    return "https://api.x.ai/v1";
+  }
+  return null;
+}
 
 settings.get("/", (c) => {
   const app = loadAppSettings();
   const runtime = getRuntimeSettings();
+  const activeKey = getApiKeyForProvider(runtime.provider, app);
   return c.json({
     provider: runtime.provider,
     model: runtime.model,
     customBaseUrl: runtime.customBaseUrl || null,
+    resolvedBaseUrl: resolvedBaseUrl(app),
+    activeKeySuffix:
+      activeKey.trim().length >= 4 ? activeKey.trim().slice(-4) : null,
+    configWins: app.agent.settingsOverrideEnv ? "settings.json (Web UI)" : "env bootstrap",
+    agent: app.agent,
     providers: listProvidersPublic(app),
     keys: maskedKeys(app),
     storage: "settings.json in BLANK_CLOUD_DATA (Web UI)",
@@ -176,20 +224,85 @@ settings.patch("/", async (c) => {
     keyUpdates[field] = data.apiKey.trim();
   }
 
-  const next = updateAppSettings({
-    provider: data.provider,
-    model: data.model,
-    customBaseUrl: data.customBaseUrl,
-    keys: keyUpdates,
-  });
+  const patch: Record<string, unknown> = { keys: keyUpdates };
+  if (data.provider !== undefined) patch.provider = data.provider;
+  if (data.model !== undefined) patch.model = data.model;
+  if (data.customBaseUrl !== undefined) patch.customBaseUrl = data.customBaseUrl;
+  if (data.agent !== undefined) patch.agent = data.agent;
+
+  const next = updateAppSettings(patch);
 
   return c.json({
     provider: next.provider,
     model: next.model,
     customBaseUrl: next.customBaseUrl || null,
+    resolvedBaseUrl: resolvedBaseUrl(next),
+    agent: next.agent,
     providers: listProvidersPublic(next),
     keys: maskedKeys(next),
   });
+});
+
+settings.post("/test-propose", async (c) => {
+  const started = Date.now();
+  try {
+    await runWithModelFallback("settings-propose-test", "edit", async (model) => {
+      const propose = tool({
+        description: "Write one file",
+        parameters: proposeChangesArgsSchema,
+        execute: async ({ files }) => ({ ok: true, count: files.length }),
+      });
+      await generateText({
+        model,
+        tools: { propose_changes: propose },
+        maxSteps: 2,
+        prompt:
+          'Call propose_changes once with summary "test" and files [{"path":"_blank_cloud_probe.txt","content":"ok"}] as a real array, not a string.',
+        maxTokens: 256,
+      });
+    });
+    return c.json({ ok: true, latencyMs: Date.now() - started, toolCalling: true });
+  } catch (err) {
+    return c.json(
+      {
+        ok: false,
+        latencyMs: Date.now() - started,
+        error: formatAgentError(err, { provider: getRuntimeSettings().provider }),
+      },
+      400,
+    );
+  }
+});
+
+settings.post("/test-tools", async (c) => {
+  const started = Date.now();
+  try {
+    await runWithModelFallback("settings-tools-test", "edit", async (model, label) => {
+      const ping = tool({
+        description: "Health check",
+        parameters: z.object({ ok: z.boolean() }),
+        execute: async () => ({ ok: true }),
+      });
+      await generateText({
+        model,
+        tools: { ping },
+        maxSteps: 2,
+        prompt: "Call the ping tool once with ok true, then reply DONE.",
+        maxTokens: 64,
+      });
+      return label;
+    });
+    return c.json({ ok: true, latencyMs: Date.now() - started });
+  } catch (err) {
+    return c.json(
+      {
+        ok: false,
+        latencyMs: Date.now() - started,
+        error: formatAgentError(err, { provider: getRuntimeSettings().provider }),
+      },
+      400,
+    );
+  }
 });
 
 export { settings as settingsRoutes };

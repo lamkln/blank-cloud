@@ -302,6 +302,56 @@ curl -s -X PATCH http://localhost:8787/settings \
   -d '{"provider":"anthropic","model":"claude-sonnet-4-20250514","apiKey":"sk-..."}' | jq
 ```
 
+See [docs/external-agents.md](docs/external-agents.md) for `/v1` vs `/tasks`, auto-approve, wait, and step sizing.
+
+## Grok Bot (OpenAI-compatible API)
+
+Use **Grok Bot** (or any OpenAI-compatible desktop client) to talk to the same **blank-cloud coding agent** as the Web UI — not the xAI Grok chat API. Configure your LLM in Web UI → **Model** (e.g. **Grok** with `XAI_API_KEY`) first; the `/v1` API only forwards chat to that agent.
+
+1. In `.env` next to `docker-compose.yml`:
+
+```bash
+BLANK_CLOUD_API_KEY=choose-a-long-random-secret
+# Required when you use Connect GitHub (per-user workspaces):
+BLANK_CLOUD_API_GITHUB_LOGIN=your-github-username
+```
+
+2. Restart: `docker compose up -d --build`
+3. In Grok Bot, add a **custom OpenAI-compatible** model:
+
+| Field | Value |
+|--------|--------|
+| Base URL | `http://YOUR_NAS_IP:8787/v1` |
+| API key | same as `BLANK_CLOUD_API_KEY` |
+| Model | `blank-cloud-agent` |
+
+4. Sign in on the Web UI, pick a repo, and save model settings once. Approve file changes in the Web UI after the agent proposes them (Grok Bot only receives the chat reply).
+
+```bash
+curl -s http://localhost:8787/v1/models \
+  -H "Authorization: Bearer $BLANK_CLOUD_API_KEY" | jq
+
+curl -s http://localhost:8787/v1/chat/completions \
+  -H "Authorization: Bearer $BLANK_CLOUD_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"blank-cloud-agent","stream":false,"messages":[{"role":"user","content":"List files in the project root"}]}' | jq
+```
+
+Streaming (`stream: true`) is not supported on `/v1/chat/completions` yet.
+
+## Agent workflow (0.5+)
+
+Large tasks are **planned automatically** (checklist of 3–8 steps, capped files per step). Configure in **Settings → Agent**:
+
+- **First response timeout** (seconds) — fail fast or fall back to the next model profile
+- **Verify command** — e.g. `./gradlew build` or `npm test` after each Accept; output is fed back to the agent (max retries)
+- **Auto-approve** — optional workspace default; per-task `autoApprove: true` on `POST /tasks`
+- **Model fallbacks** — ordered list in `settings.json` → `agent.modelFallbacks`; use **Test tools** to verify tool-calling latency
+- **Planning vs edit model** — `agent.planningModel` / `agent.editModel` in settings (optional)
+- **AGENTS.md** and reference paths — `agent.instructionFiles` / `agent.referenceFiles`
+
+Task UI shows plan steps, **Cancel** / **Retry**, and a “waiting for model” timer. Env vars (`LLM_PROVIDER`, `LLM_MODEL`, …) bootstrap on first boot; **Web UI settings win** when `agent.settingsOverrideEnv` is true (default).
+
 ## Agent workflow
 
 1. **POST /tasks** with a natural-language task.
@@ -342,7 +392,12 @@ curl -s -X PATCH http://localhost:8787/settings \
 | `POST` | `/tasks/:id/reject` | Reject pending proposal (optional `{ "feedback": "..." }`) |
 | `POST` | `/tasks/:id/approve` | Apply pending proposal and run its commands |
 | `POST` | `/tasks/:id/undo` | Undo last applied proposal |
+| `POST` | `/tasks/:id/cancel` | Cancel a running task |
+| `POST` | `/tasks/:id/retry` | Retry after failed/cancelled |
+| `POST` | `/settings/test-tools` | Tiny tool-calling latency test |
 | `GET` | `/tasks/:id/stream` | Server-Sent Events log stream |
+| `GET` | `/v1/models` | OpenAI-compatible model list (needs `BLANK_CLOUD_API_KEY`) |
+| `POST` | `/v1/chat/completions` | Run one agent turn; `stream: false` only |
 
 ### Example session
 
@@ -406,7 +461,7 @@ WORKSPACE=./project npm run dev
 
 - The agent runs shell commands inside the container on the mounted project: **immediately** via `run_shell` during a task, and **after you Accept** when attached to a proposal. Set `BLANK_CLOUD_AGENT_SHELL=0` in `.env` to disable live shell. Obvious host-wide destructive patterns (e.g. `rm -rf /`) are blocked.
 - Mount only repositories you trust. Path operations are constrained to `/workspace`.
-- Expose port `8787` only on trusted networks; there is no built-in auth.
+- Expose port `8787` only on trusted networks. Web UI routes use GitHub sign-in; the optional `/v1` API uses `BLANK_CLOUD_API_KEY` (Bearer token). Anyone with that key can run the agent on your workspace.
 
 ## License
 
