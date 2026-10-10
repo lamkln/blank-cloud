@@ -834,6 +834,18 @@ function renderRepoStatus(data) {
   }
   el.textContent = line;
   el.className = `fine-print repo-status ${data.ready ? "ok" : "warn"}`;
+  updatePreviewButton();
+}
+
+function updatePreviewButton() {
+  const btn = $("preview-open");
+  if (!btn) return;
+  const fullName = repoSnapshot?.configured?.githubRepoFullName;
+  const ready = Boolean(fullName && repoSnapshot?.ready);
+  btn.disabled = !ready;
+  btn.title = ready
+    ? `Preview files from ${fullName}`
+    : "Select a repository in Workspace first";
 }
 
 async function loadRepo() {
@@ -859,6 +871,7 @@ async function loadRepo() {
     renderRepoStatus(data);
   } catch (e) {
     renderRepoStatus(null);
+    updatePreviewButton();
     addSystemNote(e.message);
   }
 }
@@ -1202,8 +1215,9 @@ function previewUrlForPath(rel) {
 async function loadPreviewMeta() {
   try {
     previewMeta = await api("/preview/meta");
-  } catch {
+  } catch (e) {
     previewMeta = null;
+    throw e;
   }
 }
 
@@ -1211,18 +1225,40 @@ function refreshPreviewFrame() {
   const path = $("preview-path").value.trim() || previewMeta?.defaultPath || "index.html";
   const url = previewUrlForPath(path);
   $("preview-frame").src = `${url}?t=${Date.now()}`;
-  $("preview-hint").textContent = `Showing workspace file: ${path}`;
+  const repo = previewMeta?.repo;
+  $("preview-hint").textContent = repo
+    ? `Showing ${path} from ${repo}`
+    : `Showing workspace file: ${path}`;
 }
 
 async function openPreviewModal() {
-  await loadPreviewMeta();
+  if ($("preview-open")?.disabled) {
+    addSystemNote("Select a GitHub repository in Workspace before previewing.");
+    return;
+  }
+  try {
+    await loadPreviewMeta();
+  } catch (e) {
+    addSystemNote(e.message);
+    return;
+  }
+  const repoLabel = $("preview-repo-label");
+  if (previewMeta?.repo) {
+    repoLabel.hidden = false;
+    repoLabel.textContent = `Repository: ${previewMeta.repo} (${previewMeta.branch || "main"})`;
+    $("preview-modal-title").textContent = `Preview — ${previewMeta.repo}`;
+  } else {
+    repoLabel.hidden = true;
+    $("preview-modal-title").textContent = "Website preview";
+  }
   const pathInput = $("preview-path");
   if (!pathInput.value.trim()) {
     pathInput.value = previewMeta?.defaultPath ?? previewMeta?.candidates?.[0] ?? "index.html";
   }
   if (!previewMeta?.defaultPath) {
-    $("preview-hint").textContent =
-      "No index.html in the workspace yet. Enter a path (e.g. public/index.html) or create a page with the agent.";
+    $("preview-hint").textContent = previewMeta?.repo
+      ? `No index.html in ${previewMeta.repo} yet. Enter a path or create one with the agent.`
+      : "No index.html in this repo yet. Enter a path (e.g. public/index.html).";
   }
   openModal("preview-modal");
   refreshPreviewFrame();

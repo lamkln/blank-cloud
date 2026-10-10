@@ -558,6 +558,16 @@ textarea {
   margin: 0;
 }
 
+.preview-repo-label {
+  margin: 0 0 4px;
+  color: var(--text-secondary);
+}
+
+#preview-open:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .preview-frame-wrap {
   flex: 1;
   min-height: 320px;

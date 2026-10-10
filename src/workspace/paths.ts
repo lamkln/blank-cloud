@@ -10,8 +10,11 @@ export class WorkspacePathError extends Error {
 }
 
 /** Resolve a user-supplied path to an absolute path inside the workspace. */
-export function resolveWorkspacePath(relativeOrAbsolute: string): string {
-  const root = getWorkspaceRoot();
+export function resolveWorkspacePath(
+  relativeOrAbsolute: string,
+  workspaceRoot?: string,
+): string {
+  const root = workspaceRoot ?? getWorkspaceRoot();
   const normalized = relativeOrAbsolute.replace(/^\/+/, "");
   const candidate = path.resolve(root, normalized);
   const relative = path.relative(root, candidate);

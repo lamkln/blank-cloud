@@ -12,11 +12,14 @@ const CANDIDATE_PATHS = [
   "site/index.html",
 ];
 
-export function listPreviewCandidates(): { defaultPath: string | null; candidates: string[] } {
+export function listPreviewCandidates(workspaceRoot: string): {
+  defaultPath: string | null;
+  candidates: string[];
+} {
   const candidates: string[] = [];
   for (const rel of CANDIDATE_PATHS) {
     try {
-      const abs = resolveWorkspacePath(rel);
+      const abs = resolveWorkspacePath(rel, workspaceRoot);
       if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
         candidates.push(rel.replace(/\\/g, "/"));
       }
