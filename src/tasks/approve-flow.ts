@@ -6,7 +6,7 @@ import {
   buildFailureContinuationUserMessage,
   runAgentTurnInternal,
 } from "./agent.js";
-import { canAutoApproveProposal } from "./auto-approve.js";
+import { canAutoApproveProposal, explainAutoApproveDenial } from "./auto-approve.js";
 import { continueTaskOrchestrator } from "./orchestrator.js";
 import { applyProposal } from "./proposals.js";
 import { runShellCommands } from "./runner.js";
@@ -106,7 +106,19 @@ export async function approveTaskProposal(
 export async function tryAutoApprove(taskId: string): Promise<boolean> {
   const task = getTask(taskId);
   if (!task?.pendingProposal) return false;
+  const denial = explainAutoApproveDenial(task, task.pendingProposal);
+  if (denial) {
+    updateTask(taskId, {
+      controls: { ...task.controls, lastAutoApproveReason: denial },
+    });
+    emit(taskId, "log", denial, { autoApprove: false });
+    return false;
+  }
   if (!canAutoApproveProposal(task, task.pendingProposal)) return false;
+  emit(taskId, "log", "Auto-approving proposal", { autoApprove: true });
+  updateTask(taskId, {
+    controls: { ...task.controls, lastAutoApproveReason: "Auto-approved" },
+  });
   await approveTaskProposal(taskId, "auto");
   return true;
 }

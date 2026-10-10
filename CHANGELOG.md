@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1
+
+- **propose_changes** — lenient `files` parsing (stringified JSON arrays, fragment repair); `experimental_repairToolCall`; clearer tool errors.
+- **Auto-approve** — denial reasons in UI/logs; `autoApproveRelaxRules` / `autoApproveAllowShell` on `POST /tasks`; approve queued when proposal is set.
+- **Gradle verify default** — `./gradlew build` when no `verifyCommand` set.
+- **Templates** — `template` on tasks copies `data/templates/<name>/` into workspace.
+- **API** — `progress` on tasks, `GET /tasks/:id/wait`, `POST /tasks` with `wait: true`; `POST /settings/test-propose`.
+- Docs: `docs/external-agents.md`.
+
 ## 0.5.0
 
 - **Automatic task planning** — large prompts split into a checklist (3–8 steps); each step runs in its own model turn with a per-step file cap (default 3).

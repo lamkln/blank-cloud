@@ -52,6 +52,8 @@ export function createTask(
       activeModel: null,
       currentPhase: null,
       verifyAttempts: 0,
+      lastAutoApproveReason: null,
+      filesWritten: 0,
     },
   };
   tasks.set(task.id, task);

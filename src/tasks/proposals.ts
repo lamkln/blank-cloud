@@ -6,6 +6,8 @@ import {
 } from "../workspace/paths.js";
 import { emit, getTask, updateTask } from "./store.js";
 import type { PendingProposal, UndoSnapshot } from "./types.js";
+import { explainAutoApproveDenial } from "./auto-approve.js";
+import { tryAutoApprove } from "./approve-flow.js";
 
 export function applyProposal(taskId: string): UndoSnapshot {
   const task = getTask(taskId);
@@ -32,6 +34,10 @@ export function applyProposal(taskId: string): UndoSnapshot {
     undoStack: [...task.undoStack, undo],
     pendingProposal: null,
     status: "executing",
+    controls: {
+      ...task.controls,
+      filesWritten: (task.controls?.filesWritten ?? 0) + proposal.files.length,
+    },
   });
 
   emit(taskId, "applied", proposal.summary, {
@@ -74,5 +80,24 @@ export function setPendingProposal(taskId: string, proposal: PendingProposal): v
   });
   emit(taskId, "awaiting_approval", "Waiting for POST /tasks/:id/approve", {
     status: "awaiting_approval",
+  });
+
+  const task = getTask(taskId);
+  if (task) {
+    const reason = explainAutoApproveDenial(task, proposal);
+    if (reason) {
+      updateTask(taskId, {
+        controls: { ...task.controls, lastAutoApproveReason: reason },
+      });
+      emit(taskId, "log", reason, { autoApprove: false });
+    } else {
+      updateTask(taskId, {
+        controls: { ...task.controls, lastAutoApproveReason: null },
+      });
+    }
+  }
+
+  queueMicrotask(() => {
+    void tryAutoApprove(taskId);
   });
 }

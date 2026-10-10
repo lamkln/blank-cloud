@@ -57,9 +57,22 @@ export function defaultAgentSettings(): AgentSettings {
     verifyTimeoutSec: 300,
     referenceFiles: [],
     instructionFiles: ["AGENTS.md", ".blank-cloud/AGENTS.md"],
-    modelFallbacks: [],
-    planningModel: null,
-    editModel: null,
+    modelFallbacks: [
+      {
+        id: "nim-glm-fast",
+        label: "NIM glm-5.3-flash (fast)",
+        provider: "nim",
+        model: "z-ai/glm-5.3-flash",
+      },
+    ],
+    planningModel: {
+      provider: "nim",
+      model: "z-ai/glm-5.3-flash",
+    },
+    editModel: {
+      provider: "nim",
+      model: "z-ai/glm-5.3-flash",
+    },
     settingsOverrideEnv: true,
   };
 }

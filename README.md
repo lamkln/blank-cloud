@@ -302,6 +302,8 @@ curl -s -X PATCH http://localhost:8787/settings \
   -d '{"provider":"anthropic","model":"claude-sonnet-4-20250514","apiKey":"sk-..."}' | jq
 ```
 
+See [docs/external-agents.md](docs/external-agents.md) for `/v1` vs `/tasks`, auto-approve, wait, and step sizing.
+
 ## Grok Bot (OpenAI-compatible API)
 
 Use **Grok Bot** (or any OpenAI-compatible desktop client) to talk to the same **blank-cloud coding agent** as the Web UI — not the xAI Grok chat API. Configure your LLM in Web UI → **Model** (e.g. **Grok** with `XAI_API_KEY`) first; the `/v1` API only forwards chat to that agent.
@@ -390,6 +392,9 @@ Task UI shows plan steps, **Cancel** / **Retry**, and a “waiting for model” 
 | `POST` | `/tasks/:id/reject` | Reject pending proposal (optional `{ "feedback": "..." }`) |
 | `POST` | `/tasks/:id/approve` | Apply pending proposal and run its commands |
 | `POST` | `/tasks/:id/undo` | Undo last applied proposal |
+| `POST` | `/tasks/:id/cancel` | Cancel a running task |
+| `POST` | `/tasks/:id/retry` | Retry after failed/cancelled |
+| `POST` | `/settings/test-tools` | Tiny tool-calling latency test |
 | `GET` | `/tasks/:id/stream` | Server-Sent Events log stream |
 | `GET` | `/v1/models` | OpenAI-compatible model list (needs `BLANK_CLOUD_API_KEY`) |
 | `POST` | `/v1/chat/completions` | Run one agent turn; `stream: false` only |

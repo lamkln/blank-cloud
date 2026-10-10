@@ -2,11 +2,12 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { getWorkspaceRoot } from "../config.js";
 import { isWorkspaceReady } from "../repo/git.js";
-import { buildRejectionUserMessage, runAgentTurn } from "../tasks/agent.js";
+import { buildRejectionUserMessage } from "../tasks/agent.js";
 import { approveTaskProposal } from "../tasks/approve-flow.js";
 import { requestTaskCancel } from "../tasks/cancel.js";
 import { undoLastApply } from "../tasks/proposals.js";
-import { taskToJson } from "../tasks/serialize.js";
+import { taskProgressSummary, taskToJson } from "../tasks/serialize.js";
+import { runTaskOrchestrator } from "../tasks/orchestrator.js";
 import {
   appendTaskMessage,
   createTask,
@@ -52,7 +53,12 @@ tasks.post("/", async (c) => {
     prompt?: string;
     message?: string;
     autoApprove?: boolean;
+    autoApproveRelaxRules?: boolean;
+    autoApproveAllowShell?: boolean;
     referenceFiles?: string[];
+    template?: string;
+    wait?: boolean;
+    waitTimeoutMs?: number;
   };
   try {
     body = await c.req.json();
@@ -79,20 +85,83 @@ tasks.post("/", async (c) => {
 
   const task = createTask(prompt, currentOwner(), {
     autoApprove: body.autoApprove,
+    autoApproveRelaxRules: body.autoApproveRelaxRules,
+    autoApproveAllowShell: body.autoApproveAllowShell,
     referenceFiles: body.referenceFiles,
+    template: body.template,
   });
-  queueMicrotask(() => {
-    void runAgentTurn(task.id);
-  });
+
+  const run = () => {
+    queueMicrotask(() => {
+      void runTaskOrchestrator(task.id);
+    });
+  };
+
+  if (body.wait) {
+    run();
+    const timeout = Math.min(Math.max(body.waitTimeoutMs ?? 600_000, 5_000), 900_000);
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const current = getTask(task.id);
+      if (
+        current &&
+        (current.status === "completed" ||
+          current.status === "failed" ||
+          current.status === "cancelled" ||
+          (current.status === "awaiting_approval" && !body.autoApprove))
+      ) {
+        break;
+      }
+      if (current?.status === "awaiting_approval" && body.autoApprove) {
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    const final = getTask(task.id);
+    return c.json(
+      {
+        ...taskToJson(final!),
+        stream: `/tasks/${task.id}/stream`,
+      },
+      201,
+    );
+  }
+
+  run();
 
   return c.json(
     {
       id: task.id,
       status: task.status,
+      progress: taskProgressSummary(task),
       stream: `/tasks/${task.id}/stream`,
     },
     201,
   );
+});
+
+tasks.get("/:id/wait", async (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  const timeout = Math.min(Number(c.req.query("timeoutMs") ?? "120000"), 900_000);
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const current = getTask(task.id);
+    if (
+      current &&
+      (current.status === "completed" ||
+        current.status === "failed" ||
+        current.status === "cancelled" ||
+        current.status === "awaiting_approval")
+    ) {
+      return c.json(taskToJson(current));
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return c.json({ ...taskToJson(getTask(task.id)!), timedOut: true }, 408);
 });
 
 tasks.get("/:id/events", (c) => {
@@ -136,7 +205,7 @@ tasks.post("/:id/message", async (c) => {
 
   appendTaskMessage(task.id, "user", message);
   queueMicrotask(() => {
-    void runAgentTurn(task.id);
+    void runTaskOrchestrator(task.id);
   });
 
   return c.json({ id: task.id, status: "running" });
@@ -164,7 +233,7 @@ tasks.post("/:id/reject", async (c) => {
 
   appendTaskMessage(task.id, "user", buildRejectionUserMessage(feedback));
   queueMicrotask(() => {
-    void runAgentTurn(task.id);
+    void runTaskOrchestrator(task.id);
   });
 
   return c.json({ id: task.id, status: "running" });
@@ -211,7 +280,7 @@ tasks.post("/:id/retry", (c) => {
   }
   updateTask(task.id, { status: "running", lastError: null });
   queueMicrotask(() => {
-    void runAgentTurn(task.id);
+    void runTaskOrchestrator(task.id);
   });
   return c.json({ id: task.id, status: "running" });
 });

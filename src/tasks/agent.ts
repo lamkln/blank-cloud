@@ -9,6 +9,7 @@ import { getFirstResponseTimeoutMs } from "../settings/agent-settings.js";
 import { buildWorkspaceContextBlock } from "./context.js";
 import { assertNotCancelled, beginTaskRun, getTaskAbortSignal } from "./cancel.js";
 import type { LanguageModel } from "ai";
+import type { LanguageModelV1FunctionToolCall } from "@ai-sdk/provider";
 import {
   listDirectory,
   readWorkspaceFile,
@@ -16,6 +17,11 @@ import {
   WorkspacePathError,
 } from "../workspace/paths.js";
 import { setPendingProposal } from "./proposals.js";
+import {
+  formatProposeChangesValidationError,
+  normalizeFilesField,
+  proposeChangesArgsSchema,
+} from "./tool-args.js";
 import { appendTaskMessage, emit, getTask, updateTask } from "./store.js";
 import type { TaskRecord } from "./types.js";
 import { getRuntimeSettings } from "../config.js";
@@ -126,18 +132,8 @@ function buildTools(taskId: string, maxFilesPerStep: number) {
     }),
 
     propose_changes: tool({
-      description:
-        "Propose file writes and optional post-approval shell commands; waits for user approval",
-      parameters: z.object({
-        summary: z.string(),
-        files: z.array(
-          z.object({
-            path: z.string(),
-            content: z.string(),
-          }),
-        ),
-        commands: z.array(z.string()).default([]),
-      }),
+      description: `Propose file writes (1–${maxFilesPerStep} files per call). files MUST be a JSON array of objects {path, content} — never a stringified array. Full file contents required.`,
+      parameters: proposeChangesArgsSchema,
       execute: async ({ summary, files, commands }) => {
         logAgentTask(taskId, "Tool propose_changes", {
           summary,
@@ -289,6 +285,36 @@ function createFirstProgressWaiter(
   return { promise, signal };
 }
 
+async function repairToolCallArgs(
+  taskId: string,
+  {
+    toolCall,
+    error,
+  }: {
+    toolCall: LanguageModelV1FunctionToolCall;
+    error: unknown;
+  },
+): Promise<LanguageModelV1FunctionToolCall | null> {
+  if (toolCall.toolName !== "propose_changes") {
+    return null;
+  }
+  try {
+    const raw = JSON.parse(toolCall.args) as Record<string, unknown>;
+    const files = normalizeFilesField(raw.files);
+    const fixed = { ...raw, files };
+    logAgentTask(taskId, "Repaired propose_changes args", {
+      error: error instanceof Error ? error.message : String(error),
+      fileCount: files.length,
+    });
+    return { ...toolCall, args: JSON.stringify(fixed) };
+  } catch (e) {
+    logAgentTask(taskId, "propose_changes repair failed", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return null;
+  }
+}
+
 function buildAgentGenerateOptions(
   taskId: string,
   task: TaskRecord,
@@ -303,9 +329,12 @@ function buildAgentGenerateOptions(
     system: `${SYSTEM}${context}`,
     messages: modelMessages(task),
     maxSteps: 16,
+    maxRetries: 2,
     toolCallStreaming: false,
     abortSignal: getTaskAbortSignal(taskId),
     tools: buildTools(taskId, maxFilesPerStep),
+    experimental_repairToolCall: (opts: Parameters<typeof repairToolCallArgs>[1]) =>
+      repairToolCallArgs(taskId, opts),
     onStepFinish: (stepResult: { toolCalls?: unknown[]; text?: string }) => {
       stepRef.value += 1;
       const step = stepRef.value;

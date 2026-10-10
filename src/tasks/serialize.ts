@@ -21,6 +21,21 @@ export function enrichProposal(proposal: PendingProposal): PendingProposal {
   };
 }
 
+export function taskProgressSummary(task: TaskRecord) {
+  const step = task.plan?.steps[task.plan.currentStepIndex];
+  return {
+    status: task.status,
+    planStep: task.plan ? task.plan.currentStepIndex + 1 : null,
+    planSteps: task.plan?.steps.length ?? null,
+    currentStepTitle: step?.title ?? null,
+    stepDurationMs: step?.durationMs ?? null,
+    filesWritten: task.controls?.filesWritten ?? 0,
+    lastError: task.lastError,
+    lastAutoApproveReason: task.controls?.lastAutoApproveReason ?? null,
+    pendingFiles: task.pendingProposal?.files.length ?? 0,
+  };
+}
+
 export function taskToJson(task: TaskRecord) {
   return {
     id: task.id,
@@ -35,6 +50,7 @@ export function taskToJson(task: TaskRecord) {
     plan: task.plan,
     controls: task.controls,
     options: task.options,
+    progress: taskProgressSummary(task),
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   };

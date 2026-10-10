@@ -15,6 +15,7 @@ import {
   listProvidersPublic,
 } from "../settings/store.js";
 import { runWithModelFallback } from "../providers/fallback.js";
+import { proposeChangesArgsSchema } from "../tasks/tool-args.js";
 
 const settings = new Hono();
 
@@ -240,6 +241,37 @@ settings.patch("/", async (c) => {
     providers: listProvidersPublic(next),
     keys: maskedKeys(next),
   });
+});
+
+settings.post("/test-propose", async (c) => {
+  const started = Date.now();
+  try {
+    await runWithModelFallback("settings-propose-test", "edit", async (model) => {
+      const propose = tool({
+        description: "Write one file",
+        parameters: proposeChangesArgsSchema,
+        execute: async ({ files }) => ({ ok: true, count: files.length }),
+      });
+      await generateText({
+        model,
+        tools: { propose_changes: propose },
+        maxSteps: 2,
+        prompt:
+          'Call propose_changes once with summary "test" and files [{"path":"_blank_cloud_probe.txt","content":"ok"}] as a real array, not a string.',
+        maxTokens: 256,
+      });
+    });
+    return c.json({ ok: true, latencyMs: Date.now() - started, toolCalling: true });
+  } catch (err) {
+    return c.json(
+      {
+        ok: false,
+        latencyMs: Date.now() - started,
+        error: formatAgentError(err, { provider: getRuntimeSettings().provider }),
+      },
+      400,
+    );
+  }
 });
 
 settings.post("/test-tools", async (c) => {

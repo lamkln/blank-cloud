@@ -54,7 +54,7 @@ app.get("/health", (c) => {
     ok: true,
     version: BUILD_INFO.version || appVersion.version || "0.0.0",
     commit: BUILD_INFO.commit,
-    ui: "0.5.0",
+    ui: "0.5.1",
     openaiCompat: isOpenAiCompatEnabled(),
     workspace: getWorkspaceRoot(),
     llm: {

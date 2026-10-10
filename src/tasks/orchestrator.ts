@@ -1,6 +1,7 @@
 import { loadAppSettings } from "../settings/store.js";
 import { assertNotCancelled, clearTaskRun } from "./cancel.js";
 import { generateTaskPlan, shouldCreatePlan } from "./planning.js";
+import { copyWorkspaceTemplate } from "./template.js";
 import { tryAutoApprove } from "./approve-flow.js";
 import { runAgentTurnInternal } from "./agent.js";
 import { appendTaskMessage, emit, getTask, updateTask } from "./store.js";
@@ -19,9 +20,17 @@ function emitPlan(taskId: string): void {
 function markStep(taskId: string, index: number, status: TaskPlanStep["status"], summary?: string): void {
   const task = getTask(taskId);
   if (!task?.plan) return;
-  const steps = task.plan.steps.map((s, i) =>
-    i === index ? { ...s, status, summary: summary ?? s.summary } : s,
-  );
+  const now = new Date().toISOString();
+  const steps = task.plan.steps.map((s, i) => {
+    if (i !== index) return s;
+    const next = { ...s, status, summary: summary ?? s.summary };
+    if (status === "running" && !next.startedAt) next.startedAt = now;
+    if (status === "done" && next.startedAt) {
+      next.completedAt = now;
+      next.durationMs = Date.parse(now) - Date.parse(next.startedAt);
+    }
+    return next;
+  });
   updateTask(taskId, { plan: { ...task.plan, steps } });
   emitPlan(taskId);
 }
@@ -33,6 +42,15 @@ export async function runTaskOrchestrator(taskId: string): Promise<void> {
 
   try {
     assertNotCancelled(taskId);
+
+    if (task.options.template?.trim()) {
+      try {
+        copyWorkspaceTemplate(taskId, task.options.template.trim());
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        emit(taskId, "log", `Template skipped: ${msg}`);
+      }
+    }
 
     if (!task.plan && shouldCreatePlan(task.prompt, settings.agent)) {
       emit(taskId, "status", "Planning…", { phase: "planning" });

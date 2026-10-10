@@ -595,6 +595,11 @@ async function refreshTask() {
     renderChanges(task);
     renderPlan(task.plan);
     updateAgentProgress(task);
+    const aa = task.progress?.lastAutoApproveReason || task.controls?.lastAutoApproveReason;
+    if (aa && task.status === "awaiting_approval") {
+      $("run-meta").textContent = aa;
+      $("run-meta").className = "run-id";
+    }
     if (task.status === "running" || task.status === "executing") startPoll();
     else stopPoll();
   } catch (e) {

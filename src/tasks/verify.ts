@@ -1,6 +1,23 @@
+import fs from "node:fs";
+import path from "node:path";
+import { getWorkspaceRoot } from "../config.js";
 import { loadAppSettings } from "../settings/store.js";
 import { runShellCommand } from "./runner.js";
 import { emit, getTask, updateTask } from "./store.js";
+
+export function resolveVerifyCommand(): string {
+  const settings = loadAppSettings();
+  const explicit = settings.agent.verifyCommand.trim();
+  if (explicit) return explicit;
+  const root = getWorkspaceRoot();
+  if (fs.existsSync(path.join(root, "gradlew"))) {
+    return "./gradlew build --no-daemon -q";
+  }
+  if (fs.existsSync(path.join(root, "package.json"))) {
+    return "npm test --if-present";
+  }
+  return "";
+}
 
 const MAX_OUTPUT = 12_000;
 
@@ -9,7 +26,7 @@ export async function runWorkspaceVerify(taskId: string): Promise<{
   output: string;
   skipped: boolean;
 }> {
-  const cmd = loadAppSettings().agent.verifyCommand.trim();
+  const cmd = resolveVerifyCommand();
   if (!cmd) {
     return { ok: true, output: "", skipped: true };
   }

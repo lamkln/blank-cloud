@@ -63,6 +63,9 @@ export interface TaskPlanStep {
   filesHint?: string;
   status: PlanStepStatus;
   summary?: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
 }
 
 export interface TaskPlan {
@@ -73,7 +76,11 @@ export interface TaskPlan {
 
 export interface TaskRunOptions {
   autoApprove?: boolean;
+  /** When true with autoApprove, ignore workspace newFilesOnly and pathPrefix. */
+  autoApproveRelaxRules?: boolean;
+  autoApproveAllowShell?: boolean;
   referenceFiles?: string[];
+  template?: string;
 }
 
 export interface TaskRuntimeControls {
@@ -83,6 +90,8 @@ export interface TaskRuntimeControls {
   activeModel: string | null;
   currentPhase: string | null;
   verifyAttempts: number;
+  lastAutoApproveReason: string | null;
+  filesWritten: number;
 }
 
 export interface TaskEvent {
