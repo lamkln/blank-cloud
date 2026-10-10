@@ -4,38 +4,11 @@ import type { Context } from "hono";
 import { getWorkspaceRoot } from "../config.js";
 import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
 import type { RepoSettings } from "../settings/store.js";
-import { normalizeRemoteUrl } from "../repo/git.js";
 
 export type PreviewScope = {
   root: string;
   repo: RepoSettings;
 };
-
-function repoSlugFromRemote(remoteUrl: string, fullName: string): string {
-  const name = fullName.trim().toLowerCase();
-  if (name) return name;
-  const url = normalizeRemoteUrl(remoteUrl).toLowerCase();
-  const m = url.match(/github\.com[:/]([^/]+\/[^/.]+)/);
-  return m?.[1]?.replace(/\.git$/, "") ?? "";
-}
-
-function workspaceOriginMatchesRepo(workspaceRoot: string, fullName: string, remoteUrl: string): boolean {
-  const expected = repoSlugFromRemote(remoteUrl, fullName);
-  if (!expected) return true;
-  const gitDir = path.join(workspaceRoot, ".git");
-  if (!fs.existsSync(gitDir)) return false;
-  try {
-    const config = fs.readFileSync(path.join(gitDir, "config"), "utf8");
-    const lower = config.toLowerCase();
-    const slug = expected.toLowerCase();
-    if (lower.includes(slug)) return true;
-    const [owner, repo] = slug.split("/");
-    if (owner && repo && lower.includes(`${owner}/${repo}`)) return true;
-  } catch {
-    return false;
-  }
-  return false;
-}
 
 export function resolvePreviewScope(): PreviewScope | { error: string; status: number } {
   if (!usesActiveRemoteRepo()) {
@@ -59,19 +32,13 @@ export function resolvePreviewScope(): PreviewScope | { error: string; status: n
       status: 400,
     };
   }
-  if (!workspaceOriginMatchesRepo(root, fullName, repo.remoteUrl)) {
-    return {
-      error: `Preview is limited to ${fullName}. This folder is a different clone — re-select the repo in Workspace.`,
-      status: 409,
-    };
-  }
   return { root, repo };
 }
 
 export function previewScopeOrResponse(c: Context): PreviewScope | Response {
   const scope = resolvePreviewScope();
   if ("error" in scope) {
-    return c.json({ error: scope.error }, scope.status as 400 | 409);
+    return c.json({ error: scope.error }, scope.status as 400);
   }
   return scope;
 }
