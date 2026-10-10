@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { ChatRole, TaskEvent, TaskRecord, TaskMessage } from "./types.js";
+import type {
+  ChatRole,
+  TaskEvent,
+  TaskRecord,
+  TaskMessage,
+  TaskRunOptions,
+} from "./types.js";
 
 type Listener = (event: TaskEvent) => void;
 
@@ -12,7 +18,11 @@ function titleFromPrompt(prompt: string): string {
   return line.length > 72 ? `${line.slice(0, 69)}…` : line;
 }
 
-export function createTask(prompt: string, ownerLogin: string | null = null): TaskRecord {
+export function createTask(
+  prompt: string,
+  ownerLogin: string | null = null,
+  options: TaskRunOptions = {},
+): TaskRecord {
   const now = new Date().toISOString();
   const userMessage: TaskMessage = {
     id: randomUUID(),
@@ -33,6 +43,16 @@ export function createTask(prompt: string, ownerLogin: string | null = null): Ta
     lastError: null,
     iteration: 0,
     ownerLogin,
+    plan: null,
+    options,
+    controls: {
+      cancelRequested: false,
+      modelWaitStartedAt: null,
+      activeProvider: null,
+      activeModel: null,
+      currentPhase: null,
+      verifyAttempts: 0,
+    },
   };
   tasks.set(task.id, task);
   events.set(task.id, []);

@@ -1,5 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  defaultAgentSettings,
+  mergeAgentSettings,
+  type AgentSettings,
+} from "./agent-settings.js";
 
 export type LlmProvider =
   | "openai"
@@ -96,6 +101,7 @@ export interface AppSettings {
   keys: ProviderKeys;
   repo: RepoSettings;
   update: UpdateSettings;
+  agent: AgentSettings;
 }
 
 export interface UpdateSettings {
@@ -212,6 +218,7 @@ function defaultSettings(): AppSettings {
     keys: keysFromEnv(),
     repo: repoFromEnv(),
     update: defaultUpdateSettings(),
+    agent: defaultAgentSettings(),
   };
 }
 
@@ -243,6 +250,7 @@ export function loadAppSettings(): AppSettings {
         keys: { ...base.keys, ...(raw.keys ?? {}) },
         repo: { ...base.repo, ...(raw.repo ?? {}) },
         update: { ...base.update, ...(raw.update ?? {}) },
+        agent: mergeAgentSettings(raw.agent),
       };
       return cached;
     } catch {
@@ -267,10 +275,11 @@ function trimOrEmpty(value: string | undefined | null): string {
 }
 
 export function updateAppSettings(
-  partial: Partial<Omit<AppSettings, "keys" | "repo" | "update">> & {
+  partial: Partial<Omit<AppSettings, "keys" | "repo" | "update" | "agent">> & {
     keys?: Partial<ProviderKeys>;
     repo?: Partial<RepoSettings>;
     update?: Partial<UpdateSettings>;
+    agent?: Partial<AgentSettings>;
   },
 ): AppSettings {
   const current = loadAppSettings();
@@ -291,6 +300,7 @@ export function updateAppSettings(
     keys: { ...current.keys, ...(partial.keys ?? {}) },
     repo: { ...current.repo, ...(partial.repo ?? {}) },
     update: { ...current.update, ...(partial.update ?? {}) },
+    agent: mergeAgentSettings({ ...current.agent, ...(partial.agent ?? {}) }),
   };
 
   next.customBaseUrl = trimOrEmpty(next.customBaseUrl);

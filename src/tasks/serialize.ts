@@ -32,6 +32,9 @@ export function taskToJson(task: TaskRecord) {
     lastError: task.lastError,
     iteration: task.iteration,
     canUndo: task.undoStack.length > 0,
+    plan: task.plan,
+    controls: task.controls,
+    options: task.options,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   };

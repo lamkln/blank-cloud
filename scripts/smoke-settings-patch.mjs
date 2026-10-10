@@ -39,4 +39,17 @@ if (crashed.provider !== "nim") {
   process.exit(1);
 }
 
+if (!crashed.customBaseUrl.includes("nvidia.com")) {
+  console.error("FAIL: customBaseUrl cleared on undefined patch");
+  process.exit(1);
+}
+
+const withAgent = updateAppSettings({
+  agent: { firstResponseTimeoutSec: 45, maxFilesPerStep: 2 },
+});
+if (withAgent.agent.firstResponseTimeoutSec !== 45) {
+  console.error("FAIL: agent settings merge");
+  process.exit(1);
+}
+
 console.log("OK smoke-settings-patch");

@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { generateText, streamText, tool } from "ai";
 import { z } from "zod";
-import { createLanguageModel } from "../providers/model.js";
+import type { ModelRole } from "../providers/model-runtime.js";
+import { runWithModelFallback } from "../providers/fallback.js";
 import { logAgentTask } from "./agent-log.js";
+import { loadAppSettings } from "../settings/store.js";
+import { getFirstResponseTimeoutMs } from "../settings/agent-settings.js";
+import { buildWorkspaceContextBlock } from "./context.js";
+import { assertNotCancelled, beginTaskRun, getTaskAbortSignal } from "./cancel.js";
+import type { LanguageModel } from "ai";
 import {
   listDirectory,
   readWorkspaceFile,
@@ -32,8 +38,17 @@ Behavior:
 Prefer minimal, correct changes. Use run_shell for immediate commands; use propose_changes commands for steps that should run together after a file diff is accepted.`;
 
 const AGENT_TURN_TIMEOUT_MS = Number(process.env.BLANK_CLOUD_AGENT_TIMEOUT_MS) || 15 * 60 * 1000;
-const AGENT_FIRST_RESPONSE_MS =
-  Number(process.env.BLANK_CLOUD_AGENT_FIRST_RESPONSE_MS) || 60 * 1000;
+const turnOptions = new Map<string, AgentTurnOptions>();
+
+export interface AgentTurnOptions {
+  modelRole?: ModelRole;
+  deferCompletion?: boolean;
+  maxFilesPerStep?: number;
+}
+
+function firstResponseMs(): number {
+  return getFirstResponseTimeoutMs(loadAppSettings().agent);
+}
 
 const FIRST_PROGRESS_CHUNK_TYPES = new Set([
   "text-delta",
@@ -68,7 +83,7 @@ function emitStepProgress(taskId: string, step: number): void {
   emit(taskId, "status", message, { status: "running", step });
 }
 
-function buildTools(taskId: string) {
+function buildTools(taskId: string, maxFilesPerStep: number) {
   const base = {
     list_directory: tool({
       description: "List entries in a directory relative to the workspace root",
@@ -134,6 +149,11 @@ function buildTools(taskId: string) {
           fileCount: files.length,
           commandCount: commands.length,
         });
+        if (files.length > maxFilesPerStep) {
+          return {
+            error: `At most ${maxFilesPerStep} file(s) per step — split into another propose_changes call.`,
+          };
+        }
         for (const f of files) {
           try {
             resolveWorkspacePath(f.path);
@@ -198,9 +218,13 @@ function rollbackMessagesSince(taskId: string, messageCountAtStart: number): voi
   updateTask(taskId, { messages: task.messages.slice(0, messageCountAtStart) });
 }
 
-async function finishAgentTurn(taskId: string): Promise<void> {
+async function finishAgentTurn(taskId: string, deferCompletion = false): Promise<void> {
   const refreshed = getTask(taskId);
   if (refreshed?.pendingProposal) {
+    return;
+  }
+  if (deferCompletion || refreshed?.plan) {
+    emit(taskId, "status", "Step finished", { status: "running" });
     return;
   }
 
@@ -231,7 +255,11 @@ function withAgentTimeout<T>(promise: Promise<T>, label = "Agent"): Promise<T> {
   });
 }
 
-function createFirstProgressWaiter(taskId: string, mode: "stream" | "batch") {
+function createFirstProgressWaiter(
+  taskId: string,
+  mode: "stream" | "batch",
+  timeoutMs: number,
+) {
   let settled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let resolveFn: () => void = () => {};
@@ -241,13 +269,13 @@ function createFirstProgressWaiter(taskId: string, mode: "stream" | "batch") {
     timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      const seconds = Math.round(AGENT_FIRST_RESPONSE_MS / 1000);
+      const seconds = Math.round(timeoutMs / 1000);
       reject(
         new Error(
           `No model response within ${seconds}s (${mode} mode). Check provider/model, API key, and try BLANK_CLOUD_AGENT_STREAM=0.`,
         ),
       );
-    }, AGENT_FIRST_RESPONSE_MS);
+    }, timeoutMs);
   });
 
   const signal = (reason: string) => {
@@ -266,14 +294,18 @@ function buildAgentGenerateOptions(
   task: TaskRecord,
   stepRef: { value: number },
   signalFirst: (reason: string) => void,
+  model: LanguageModel,
+  maxFilesPerStep: number,
 ) {
+  const context = buildWorkspaceContextBlock(task);
   return {
-    model: createLanguageModel(),
-    system: SYSTEM,
+    model,
+    system: `${SYSTEM}${context}`,
     messages: modelMessages(task),
     maxSteps: 16,
     toolCallStreaming: false,
-    tools: buildTools(taskId),
+    abortSignal: getTaskAbortSignal(taskId),
+    tools: buildTools(taskId, maxFilesPerStep),
     onStepFinish: (stepResult: { toolCalls?: unknown[]; text?: string }) => {
       stepRef.value += 1;
       const step = stepRef.value;
@@ -287,20 +319,44 @@ function buildAgentGenerateOptions(
   };
 }
 
-async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void> {
+async function runStreamingTurn(
+  taskId: string,
+  task: TaskRecord,
+  model: LanguageModel,
+  opts: AgentTurnOptions,
+): Promise<void> {
   let streamId = randomUUID();
   let segmentText = "";
   const stepRef = { value: 0 };
-  const first = createFirstProgressWaiter(taskId, "stream");
-  const base = buildAgentGenerateOptions(taskId, task, stepRef, first.signal);
+  const timeoutMs = firstResponseMs();
+  const first = createFirstProgressWaiter(taskId, "stream", timeoutMs);
+  const maxFiles = opts.maxFilesPerStep ?? loadAppSettings().agent.maxFilesPerStep;
+  const base = buildAgentGenerateOptions(
+    taskId,
+    task,
+    stepRef,
+    first.signal,
+    model,
+    maxFiles,
+  );
 
   logAgentTask(taskId, "Starting streaming agent turn");
+  startModelWaitTicker(taskId);
 
   const result = streamText({
     ...base,
     onChunk: ({ chunk }) => {
       if (FIRST_PROGRESS_CHUNK_TYPES.has(chunk.type)) {
         first.signal(chunk.type);
+      }
+      if (chunk.type === "reasoning") {
+        emit(
+          taskId,
+          "reasoning_delta",
+          chunk.textDelta,
+          { role: "assistant" },
+          { persist: false },
+        );
       }
       if (chunk.type !== "text-delta") {
         return;
@@ -331,20 +387,30 @@ async function runStreamingTurn(taskId: string, task: TaskRecord): Promise<void>
 
   void result.consumeStream();
   await Promise.race([first.promise, result.text]);
+  stopModelWaitTicker(taskId);
   await withAgentTimeout(result.text, "Streaming agent");
-  await finishAgentTurn(taskId);
+  await finishAgentTurn(taskId, opts.deferCompletion);
 }
 
-async function runBatchTurn(taskId: string, task: TaskRecord): Promise<void> {
+async function runBatchTurn(
+  taskId: string,
+  task: TaskRecord,
+  model: LanguageModel,
+  opts: AgentTurnOptions,
+): Promise<void> {
   const stepRef = { value: 0 };
-  const first = createFirstProgressWaiter(taskId, "batch");
+  const timeoutMs = firstResponseMs();
+  const first = createFirstProgressWaiter(taskId, "batch", timeoutMs);
+  const maxFiles = opts.maxFilesPerStep ?? loadAppSettings().agent.maxFilesPerStep;
   logAgentTask(taskId, "Starting batch agent turn (generateText)");
+  startModelWaitTicker(taskId);
 
   const generatePromise = generateText(
-    buildAgentGenerateOptions(taskId, task, stepRef, first.signal),
+    buildAgentGenerateOptions(taskId, task, stepRef, first.signal, model, maxFiles),
   );
 
   await Promise.race([first.promise, generatePromise]);
+  stopModelWaitTicker(taskId);
   const result = await withAgentTimeout(generatePromise, "Batch agent");
 
   const refreshed = getTask(taskId);
@@ -360,27 +426,109 @@ async function runBatchTurn(taskId: string, task: TaskRecord): Promise<void> {
     appendTaskMessage(taskId, "assistant", assistantText, true);
   }
 
-  await finishAgentTurn(taskId);
+  await finishAgentTurn(taskId, opts.deferCompletion);
 }
 
-export async function runAgentTurn(taskId: string): Promise<void> {
+const waitTickers = new Map<string, ReturnType<typeof setInterval>>();
+
+function startModelWaitTicker(taskId: string): void {
+  stopModelWaitTicker(taskId);
+  const started = Date.now();
+  const settings = loadAppSettings();
+  updateTask(taskId, {
+    controls: {
+      ...getTask(taskId)!.controls,
+      modelWaitStartedAt: new Date().toISOString(),
+      currentPhase: "model_wait",
+      activeProvider: settings.provider,
+      activeModel: settings.model,
+    },
+  });
+  const timer = setInterval(() => {
+    const task = getTask(taskId);
+    if (!task) return;
+    const elapsedMs = Date.now() - started;
+    emit(taskId, "status", "Waiting for model…", {
+      phase: "model_wait",
+      elapsedMs,
+      elapsedSec: Math.floor(elapsedMs / 1000),
+      provider: task.controls.activeProvider ?? settings.provider,
+      model: task.controls.activeModel ?? settings.model,
+      planStep: task.plan?.currentStepIndex,
+    });
+  }, 1000);
+  waitTickers.set(taskId, timer);
+}
+
+function stopModelWaitTicker(taskId: string): void {
+  const t = waitTickers.get(taskId);
+  if (t) {
+    clearInterval(t);
+    waitTickers.delete(taskId);
+  }
+}
+
+async function runModelTurn(taskId: string, task: TaskRecord, opts: AgentTurnOptions): Promise<void> {
+  const role = opts.modelRole ?? "default";
+  await runWithModelFallback(taskId, role === "default" ? "edit" : role, async (model, label) => {
+    const parts = label.split("/");
+    updateTask(taskId, {
+      controls: {
+        ...getTask(taskId)!.controls,
+        activeProvider: parts[0] ?? null,
+        activeModel: parts.slice(1).join("/") || null,
+        currentPhase: "model",
+      },
+    });
+    if (agentStreamingEnabled()) {
+      try {
+        await runStreamingTurn(taskId, getTask(taskId)!, model, opts);
+      } catch (streamErr) {
+        throw streamErr;
+      }
+    } else {
+      await runBatchTurn(taskId, getTask(taskId)!, model, opts);
+    }
+  });
+}
+
+export async function runAgentTurnInternal(
+  taskId: string,
+  options: AgentTurnOptions = {},
+): Promise<void> {
   const task = getTask(taskId);
   if (!task) {
     return;
   }
+
+  const opts: AgentTurnOptions = {
+    maxFilesPerStep: loadAppSettings().agent.maxFilesPerStep,
+    ...options,
+  };
+  turnOptions.set(taskId, opts);
+  beginTaskRun(taskId);
 
   const messageCountAtStart = task.messages.length;
 
   updateTask(taskId, {
     status: "running",
     iteration: task.iteration + 1,
+    controls: {
+      ...task.controls,
+      cancelRequested: false,
+      currentPhase: "agent",
+    },
   });
-  emit(taskId, "status", "Agent working…", { status: "running", iteration: task.iteration + 1 });
+  emit(taskId, "status", "Agent working…", {
+    status: "running",
+    iteration: task.iteration + 1,
+  });
 
   try {
+    assertNotCancelled(taskId);
     if (agentStreamingEnabled()) {
       try {
-        await runStreamingTurn(taskId, getTask(taskId)!);
+        await runModelTurn(taskId, getTask(taskId)!, opts);
       } catch (streamErr) {
         const streamMessage =
           streamErr instanceof Error ? streamErr.message : String(streamErr);
@@ -397,18 +545,33 @@ export async function runAgentTurn(taskId: string): Promise<void> {
         if (!refreshed) {
           throw streamErr;
         }
-        await runBatchTurn(taskId, refreshed);
+        await runWithModelFallback(taskId, opts.modelRole ?? "edit", async (model) => {
+          await runBatchTurn(taskId, refreshed, model, opts);
+        });
       }
     } else {
-      await runBatchTurn(taskId, getTask(taskId)!);
+      await runModelTurn(taskId, getTask(taskId)!, opts);
     }
   } catch (err) {
+    if (err instanceof Error && err.message === "Task cancelled") {
+      updateTask(taskId, { status: "cancelled", lastError: "Cancelled" });
+      emit(taskId, "status", "Cancelled", { status: "cancelled" });
+      return;
+    }
     const message = formatAgentError(err, { provider: getRuntimeSettings().provider });
     logAgentTask(taskId, "Agent turn failed", { error: message });
     updateTask(taskId, { status: "failed", lastError: message });
     emit(taskId, "status", "Failed", { status: "failed" });
     emit(taskId, "error", message, { status: "failed" });
+  } finally {
+    turnOptions.delete(taskId);
+    stopModelWaitTicker(taskId);
   }
+}
+
+export async function runAgentTurn(taskId: string): Promise<void> {
+  const { runTaskOrchestrator } = await import("./orchestrator.js");
+  await runTaskOrchestrator(taskId);
 }
 
 function formatPathError(e: unknown): string {

@@ -1,5 +1,6 @@
 import { createTask, getTask } from "../tasks/store.js";
-import { runAgentTurn } from "../tasks/agent.js";
+import { runTaskOrchestrator } from "../tasks/orchestrator.js";
+import { tryAutoApprove } from "../tasks/approve-flow.js";
 import { isWorkspaceReady, syncRepository } from "../repo/git.js";
 import { getWorkspaceRoot } from "../config.js";
 import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
@@ -97,7 +98,12 @@ async function runAgentOnce(prompt: string): Promise<string> {
   const root = await ensureAgentWorkspace();
   const owner = openAiCompatGithubLogin();
   const task = createTask(prompt, owner);
-  await runAgentTurn(task.id);
+  await runTaskOrchestrator(task.id);
+  let taskState = getTask(task.id);
+  if (taskState?.pendingProposal) {
+    await tryAutoApprove(task.id);
+    taskState = getTask(task.id);
+  }
   return formatAgentReply(task.id);
 }
 

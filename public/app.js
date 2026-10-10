@@ -17,6 +17,9 @@ const EVENT_TYPES = [
   "error",
   "done",
   "stream_end",
+  "plan",
+  "reasoning_delta",
+  "verify",
 ];
 
 const STATUS_LABEL = {
@@ -28,6 +31,8 @@ const STATUS_LABEL = {
   failed: "Failed",
   cancelled: "Cancelled",
 };
+
+let progressTimer = null;
 
 const state = {
   taskId: null,
@@ -369,6 +374,14 @@ function ingestEvent(ev) {
     addTurn(roleKey, msg);
     return;
   }
+  if (type === "reasoning_delta") {
+    addTurn("agent", `[reasoning] ${msg}`);
+    return;
+  }
+  if (type === "plan") {
+    renderPlan(ev.data?.plan ?? ev.data?.steps);
+    return;
+  }
   if (type === "log") {
     addTurn("agent", msg);
     return;
@@ -519,6 +532,52 @@ function renderChanges(task) {
   }
 }
 
+function renderPlan(plan) {
+  const list = $("plan-steps");
+  if (!list) return;
+  const steps = plan?.steps ?? plan;
+  if (!steps?.length) {
+    list.hidden = true;
+    return;
+  }
+  list.hidden = false;
+  list.innerHTML = "";
+  for (const s of steps) {
+    const li = document.createElement("li");
+    li.textContent = `${s.status === "done" ? "✓" : s.status === "running" ? "…" : "○"} ${s.title}`;
+    li.className = `plan-step plan-step-${s.status}`;
+    list.appendChild(li);
+  }
+}
+
+function updateAgentProgress(task) {
+  const box = $("agent-progress");
+  const text = $("agent-progress-text");
+  const cancelBtn = $("cancel-task");
+  const retryBtn = $("retry-task");
+  if (!box || !text) return;
+  const running = task.status === "running" || task.status === "executing";
+  box.hidden = !running && task.status !== "failed";
+  cancelBtn.hidden = !running;
+  retryBtn.hidden = running || task.status === "awaiting_approval";
+  const provider = task.controls?.activeProvider || settingsSnapshot?.provider || "";
+  const model = task.controls?.activeModel || settingsSnapshot?.model || "";
+  const phase = task.controls?.currentPhase || task.status;
+  const started = task.controls?.modelWaitStartedAt
+    ? new Date(task.controls.modelWaitStartedAt).getTime()
+    : null;
+  const tick = () => {
+    const elapsed = started ? Math.floor((Date.now() - started) / 1000) : 0;
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const ss = String(elapsed % 60).padStart(2, "0");
+    text.textContent = `Waiting for model ${mm}:${ss} · ${provider}/${model} · ${phase}`;
+  };
+  tick();
+  if (progressTimer) clearInterval(progressTimer);
+  if (running) progressTimer = setInterval(tick, 1000);
+  else progressTimer = null;
+}
+
 async function refreshTask() {
   if (!state.taskId) return;
   try {
@@ -534,6 +593,8 @@ async function refreshTask() {
     $("reject").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
     $("undo").disabled = !task.canUndo;
     renderChanges(task);
+    renderPlan(task.plan);
+    updateAgentProgress(task);
     if (task.status === "running" || task.status === "executing") startPoll();
     else stopPoll();
   } catch (e) {
@@ -1098,6 +1159,19 @@ function onProviderChange() {
 async function loadSettings() {
   const data = await api("/settings");
   settingsSnapshot = data;
+  const agent = data.agent ?? {};
+  const firstSec = $("agent-first-response-sec");
+  if (firstSec) firstSec.value = agent.firstResponseTimeoutSec ?? 60;
+  const maxFiles = $("agent-max-files-step");
+  if (maxFiles) maxFiles.value = agent.maxFilesPerStep ?? 3;
+  const verify = $("agent-verify-cmd");
+  if (verify) verify.value = agent.verifyCommand ?? "";
+  const auto = $("agent-auto-approve");
+  if (auto) auto.checked = Boolean(agent.autoApprove?.enabled);
+  const hint = $("settings-active-hint");
+  if (hint) {
+    hint.textContent = `Active: ${data.provider}/${data.model} · base ${data.resolvedBaseUrl ?? "default"} · key …${data.activeKeySuffix ?? "????"} · ${data.configWins ?? ""}`;
+  }
   const select = $("provider");
   select.innerHTML = "";
   for (const p of data.providers) {
@@ -1150,6 +1224,13 @@ async function saveSettings() {
     if (v) keys[input.dataset.key] = v;
   }
   if (Object.keys(keys).length) payload.keys = keys;
+
+  payload.agent = {
+    firstResponseTimeoutSec: Number($("agent-first-response-sec")?.value || 60),
+    maxFilesPerStep: Number($("agent-max-files-step")?.value || 3),
+    verifyCommand: $("agent-verify-cmd")?.value?.trim() || "",
+    autoApprove: { enabled: Boolean($("agent-auto-approve")?.checked) },
+  };
 
   await api("/settings", { method: "PATCH", body: JSON.stringify(payload) });
   await loadSettings();
@@ -1229,6 +1310,24 @@ async function loadNimModels() {
 $("new-run").addEventListener("click", newRun);
 $("send-btn").addEventListener("click", () => void sendMessage());
 $("approve").addEventListener("click", () => void approve());
+$("cancel-task")?.addEventListener("click", async () => {
+  if (!state.taskId) return;
+  await api(`/tasks/${state.taskId}/cancel`, { method: "POST", body: "{}" });
+  void refreshTask();
+});
+$("retry-task")?.addEventListener("click", async () => {
+  if (!state.taskId) return;
+  await api(`/tasks/${state.taskId}/retry`, { method: "POST", body: "{}" });
+  void refreshTask();
+});
+$("test-tools-settings")?.addEventListener("click", async () => {
+  try {
+    const res = await api("/settings/test-tools", { method: "POST", body: "{}" });
+    setSettingsStatus(`Tools OK (${res.latencyMs}ms)`, "ok");
+  } catch (e) {
+    setSettingsStatus(e.message, "err");
+  }
+});
 $("reject").addEventListener("click", () => void reject());
 $("undo").addEventListener("click", () => void undoApply());
 $("save-settings").addEventListener("click", () => void saveSettings());

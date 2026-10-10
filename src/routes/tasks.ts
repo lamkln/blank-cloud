@@ -1,14 +1,11 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { getWorkspaceRoot } from "../config.js";
-import { commitAndPush, isWorkspaceReady } from "../repo/git.js";
-import {
-  buildFailureContinuationUserMessage,
-  buildRejectionUserMessage,
-  runAgentTurn,
-} from "../tasks/agent.js";
-import { applyProposal, undoLastApply } from "../tasks/proposals.js";
-import { runShellCommands } from "../tasks/runner.js";
+import { isWorkspaceReady } from "../repo/git.js";
+import { buildRejectionUserMessage, runAgentTurn } from "../tasks/agent.js";
+import { approveTaskProposal } from "../tasks/approve-flow.js";
+import { requestTaskCancel } from "../tasks/cancel.js";
+import { undoLastApply } from "../tasks/proposals.js";
 import { taskToJson } from "../tasks/serialize.js";
 import {
   appendTaskMessage,
@@ -21,10 +18,8 @@ import {
   updateTask,
 } from "../tasks/store.js";
 import { getRequestUser } from "../context/request.js";
-import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
+import { usesActiveRemoteRepo } from "../repo/runtime.js";
 import { isGitHubOAuthConfigured } from "../auth/github-oauth.js";
-
-import { updateUser } from "../auth/users.js";
 
 const tasks = new Hono();
 
@@ -53,7 +48,12 @@ tasks.get("/", (c) => {
 });
 
 tasks.post("/", async (c) => {
-  let body: { prompt?: string; message?: string };
+  let body: {
+    prompt?: string;
+    message?: string;
+    autoApprove?: boolean;
+    referenceFiles?: string[];
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -77,7 +77,10 @@ tasks.post("/", async (c) => {
     );
   }
 
-  const task = createTask(prompt, currentOwner());
+  const task = createTask(prompt, currentOwner(), {
+    autoApprove: body.autoApprove,
+    referenceFiles: body.referenceFiles,
+  });
   queueMicrotask(() => {
     void runAgentTurn(task.id);
   });
@@ -175,86 +178,42 @@ tasks.post("/:id/approve", async (c) => {
   if (!task.pendingProposal) {
     return c.json({ error: "No pending proposal to approve" }, 400);
   }
-
-  const proposal = { ...task.pendingProposal };
   try {
-    applyProposal(task.id);
+    const result = await approveTaskProposal(task.id, "user");
+    return c.json({ id: task.id, ...result });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return c.json({ error: message }, 400);
   }
+});
 
-  emit(task.id, "log", "Changes approved — applying to workspace");
-
-  const taskId = task.id;
-
-  async function maybePushAfterApply(): Promise<void> {
-    const repoSettings = activeRepoSettings();
-    if (!repoSettings.pushOnApprove || !usesActiveRemoteRepo()) return;
-    try {
-      const paths = proposal.files.map((f) => f.path);
-      const pushResult = await commitAndPush(
-        getWorkspaceRoot(),
-        repoSettings,
-        `blank-cloud: ${proposal.summary}`.slice(0, 200),
-        paths,
-      );
-      if (pushResult.pushed) {
-        emit(taskId, "log", `Pushed commit ${pushResult.commit} to origin`);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      emit(taskId, "log", `Git push skipped: ${msg}`);
-    }
+tasks.post("/:id/cancel", (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
   }
-
-  const commands = proposal.commands;
-  if (commands.length === 0) {
-    await maybePushAfterApply();
-    updateTask(task.id, { status: "completed" });
-    emit(task.id, "done", "Changes applied", { status: "completed" });
-    return c.json({ id: task.id, status: "completed", applied: true, commandsRun: [] });
-  }
-
-  const results = await runShellCommands(task.id, commands);
-  const failed = results.find((r) => r.exitCode !== 0 || r.timedOut);
-  const refreshed = getTask(task.id)!;
-
-  if (!failed) {
-    await maybePushAfterApply();
-  }
-
-  if (failed) {
-    const err = failed.timedOut
-      ? `Command timed out: ${failed.command}`
-      : `Command failed (${failed.exitCode}): ${failed.command}`;
-    updateTask(task.id, { status: "running", lastError: err });
-    emit(task.id, "error", err);
-    appendTaskMessage(
-      task.id,
-      "user",
-      buildFailureContinuationUserMessage(refreshed, err),
-    );
-    queueMicrotask(() => {
-      void runAgentTurn(task.id);
-    });
-    return c.json({
-      id: task.id,
-      status: "running",
-      applied: true,
-      commandsRun: results,
-    });
-  }
-
-  updateTask(task.id, { status: "completed" });
-  emit(task.id, "done", "Changes applied and commands succeeded", { status: "completed" });
-
-  return c.json({
-    id: task.id,
-    status: "completed",
-    applied: true,
-    commandsRun: results,
+  requestTaskCancel(task.id);
+  updateTask(task.id, {
+    status: "cancelled",
+    controls: { ...task.controls, cancelRequested: true },
   });
+  emit(task.id, "status", "Cancel requested", { status: "cancelled" });
+  return c.json({ id: task.id, status: "cancelled" });
+});
+
+tasks.post("/:id/retry", (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  if (task.status === "running" || task.status === "executing") {
+    return c.json({ error: "Task is still running" }, 409);
+  }
+  updateTask(task.id, { status: "running", lastError: null });
+  queueMicrotask(() => {
+    void runAgentTurn(task.id);
+  });
+  return c.json({ id: task.id, status: "running" });
 });
 
 tasks.post("/:id/undo", (c) => {

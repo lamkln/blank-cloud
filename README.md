@@ -337,6 +337,19 @@ curl -s http://localhost:8787/v1/chat/completions \
 
 Streaming (`stream: true`) is not supported on `/v1/chat/completions` yet.
 
+## Agent workflow (0.5+)
+
+Large tasks are **planned automatically** (checklist of 3–8 steps, capped files per step). Configure in **Settings → Agent**:
+
+- **First response timeout** (seconds) — fail fast or fall back to the next model profile
+- **Verify command** — e.g. `./gradlew build` or `npm test` after each Accept; output is fed back to the agent (max retries)
+- **Auto-approve** — optional workspace default; per-task `autoApprove: true` on `POST /tasks`
+- **Model fallbacks** — ordered list in `settings.json` → `agent.modelFallbacks`; use **Test tools** to verify tool-calling latency
+- **Planning vs edit model** — `agent.planningModel` / `agent.editModel` in settings (optional)
+- **AGENTS.md** and reference paths — `agent.instructionFiles` / `agent.referenceFiles`
+
+Task UI shows plan steps, **Cancel** / **Retry**, and a “waiting for model” timer. Env vars (`LLM_PROVIDER`, `LLM_MODEL`, …) bootstrap on first boot; **Web UI settings win** when `agent.settingsOverrideEnv` is true (default).
+
 ## Agent workflow
 
 1. **POST /tasks** with a natural-language task.
