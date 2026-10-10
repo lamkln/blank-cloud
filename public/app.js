@@ -1192,8 +1192,57 @@ function openSettingsModal() {
   void loadSettings().then(() => openModal("settings-modal"));
 }
 
+let previewMeta = null;
+
+function previewUrlForPath(rel) {
+  const path = String(rel || "index.html").replace(/^\/+/, "");
+  return `/preview/file/${path.split("/").map((s) => encodeURIComponent(s)).join("/")}`;
+}
+
+async function loadPreviewMeta() {
+  try {
+    previewMeta = await api("/preview/meta");
+  } catch {
+    previewMeta = null;
+  }
+}
+
+function refreshPreviewFrame() {
+  const path = $("preview-path").value.trim() || previewMeta?.defaultPath || "index.html";
+  const url = previewUrlForPath(path);
+  $("preview-frame").src = `${url}?t=${Date.now()}`;
+  $("preview-hint").textContent = `Showing workspace file: ${path}`;
+}
+
+async function openPreviewModal() {
+  await loadPreviewMeta();
+  const pathInput = $("preview-path");
+  if (!pathInput.value.trim()) {
+    pathInput.value = previewMeta?.defaultPath ?? previewMeta?.candidates?.[0] ?? "index.html";
+  }
+  if (!previewMeta?.defaultPath) {
+    $("preview-hint").textContent =
+      "No index.html in the workspace yet. Enter a path (e.g. public/index.html) or create a page with the agent.";
+  }
+  openModal("preview-modal");
+  refreshPreviewFrame();
+}
+
 $("settings-open")?.addEventListener("click", openSettingsModal);
+$("preview-open")?.addEventListener("click", () => void openPreviewModal());
 bindModal("settings-modal", "settings-close");
+bindModal("preview-modal", "preview-close");
+$("preview-refresh").addEventListener("click", () => refreshPreviewFrame());
+$("preview-new-tab").addEventListener("click", () => {
+  const path = $("preview-path").value.trim() || "index.html";
+  window.open(previewUrlForPath(path), "_blank", "noopener");
+});
+$("preview-path").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    refreshPreviewFrame();
+  }
+});
 
 $("composer-input").addEventListener("input", resizeComposer);
 $("composer-input").addEventListener("keydown", (e) => {
@@ -1204,7 +1253,10 @@ $("composer-input").addEventListener("keydown", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal("settings-modal");
+  if (e.key === "Escape") {
+    closeModal("settings-modal");
+    closeModal("preview-modal");
+  }
 });
 
 void loadHealth();

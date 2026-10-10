@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="icon" type="image/png" sizes="32x32" href="/ui/favicon-32.png" />
     <link rel="apple-touch-icon" href="/ui/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/ui/styles.css?v=0.4.4" />
+    <link rel="stylesheet" href="/ui/styles.css?v=0.3.6" />
   </head>
   <body class="owui">
     <div class="app" id="app-root">
@@ -90,7 +90,10 @@
             <h1 id="run-title">New Chat</h1>
             <p id="run-meta" class="run-id" hidden></p>
           </div>
-          <div class="header-status">
+          <div class="header-actions">
+            <button type="button" class="btn btn-sm" id="preview-open" title="Preview site from workspace">
+              Preview
+            </button>
             <span class="status-pill status-idle" id="status-label">Ready</span>
           </div>
         </header>
@@ -182,6 +185,31 @@
       </aside>
     </div>
 
+    <div class="modal-backdrop modal-backdrop-wide" id="preview-modal" hidden>
+      <div class="modal modal-preview" role="dialog" aria-labelledby="preview-modal-title" aria-modal="true">
+        <header class="modal-header">
+          <h2 id="preview-modal-title">Website preview</h2>
+          <button type="button" class="modal-close" id="preview-close" aria-label="Close">×</button>
+        </header>
+        <div class="modal-body preview-modal-body">
+          <div class="preview-toolbar">
+            <label class="field field-inline">
+              <span>Path</span>
+              <input id="preview-path" type="text" spellcheck="false" autocomplete="off" placeholder="index.html" />
+            </label>
+            <button type="button" class="btn btn-sm btn-primary" id="preview-refresh">Refresh</button>
+            <button type="button" class="btn btn-sm" id="preview-new-tab">Open tab</button>
+          </div>
+          <p class="fine-print preview-hint" id="preview-hint">
+            Serves static files from your workspace. For Vite/Next dev servers, run them separately and open their port.
+          </p>
+          <div class="preview-frame-wrap">
+            <iframe id="preview-frame" title="Website preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="settings-modal" hidden>
       <div class="modal modal-wide" role="dialog" aria-labelledby="settings-modal-title" aria-modal="true">
         <header class="modal-header">
@@ -251,7 +279,7 @@
       </div>
     </div>
 
-    <script src="/ui/markdown.js?v=0.4.4"></script>
-    <script src="/ui/app.js?v=0.4.4" type="module"></script>
+    <script src="/ui/markdown.js?v=0.3.6"></script>
+    <script src="/ui/app.js?v=0.3.6" type="module"></script>
   </body>
 </html>
