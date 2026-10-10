@@ -29,6 +29,44 @@ preview.get("/meta", (c) => {
   });
 });
 
+preview.get("/check", (c) => {
+  const scope = previewScopeOrResponse(c);
+  if (scope instanceof Response) {
+    return scope;
+  }
+  const { root } = scope;
+  const relative = (c.req.query("path") ?? "index.html").trim().replace(/^\/+/, "");
+  const { candidates, defaultPath } = listPreviewCandidates(root);
+  let exists = false;
+  let size = 0;
+  let empty = false;
+  try {
+    const abs = resolveWorkspacePath(relative, root);
+    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+      exists = true;
+      size = fs.statSync(abs).size;
+      if (size === 0) {
+        empty = true;
+      } else if (previewContentType(abs)?.startsWith("text/html")) {
+        const snippet = fs.readFileSync(abs, "utf8").slice(0, 8000);
+        const body = snippet.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? snippet;
+        const visible = body.replace(/<[^>]+>/g, "").trim();
+        empty = visible.length < 2;
+      }
+    }
+  } catch {
+    exists = false;
+  }
+  return c.json({
+    path: relative,
+    exists,
+    size,
+    empty,
+    defaultPath,
+    candidates,
+  });
+});
+
 function relativePreviewPath(c: { req: { path: string } }): string {
   const p = c.req.path;
   const markers = ["/preview/file/", "/file/"];

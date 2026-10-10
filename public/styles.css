@@ -569,12 +569,36 @@ textarea {
 }
 
 .preview-frame-wrap {
+  position: relative;
   flex: 1;
   min-height: 320px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   background: #fff;
+}
+
+.preview-empty-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.preview-empty-overlay[hidden] {
+  display: none;
+}
+
+.preview-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .preview-frame-wrap iframe {

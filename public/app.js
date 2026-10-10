@@ -1221,14 +1221,55 @@ async function loadPreviewMeta() {
   }
 }
 
-function refreshPreviewFrame() {
+function showPreviewEmpty(title, body) {
+  $("preview-empty-title").textContent = title;
+  $("preview-empty-body").textContent = body;
+  $("preview-empty").hidden = false;
+  $("preview-frame").src = "about:blank";
+}
+
+function hidePreviewEmpty() {
+  $("preview-empty").hidden = true;
+}
+
+async function refreshPreviewFrame() {
   const path = $("preview-path").value.trim() || previewMeta?.defaultPath || "index.html";
-  const url = previewUrlForPath(path);
-  $("preview-frame").src = `${url}?t=${Date.now()}`;
   const repo = previewMeta?.repo;
-  $("preview-hint").textContent = repo
-    ? `Showing ${path} from ${repo}`
-    : `Showing workspace file: ${path}`;
+  try {
+    const check = await api(`/preview/check?path=${encodeURIComponent(path)}`);
+    if (!check.exists) {
+      const alt = check.defaultPath || check.candidates?.[0];
+      const altHint = alt ? ` Try ${alt} instead.` : "";
+      showPreviewEmpty(
+        "File not found in this repo",
+        `${path} does not exist in the workspace yet.${altHint} Configure Model, run your prompt in chat, Accept changes, then Refresh.`,
+      );
+      $("preview-hint").textContent = repo
+        ? `Missing: ${path} (${repo})`
+        : `Missing: ${path}`;
+      if (alt && alt !== path) {
+        $("preview-path").value = alt;
+      }
+      return;
+    }
+    if (check.empty) {
+      showPreviewEmpty(
+        "Page is empty",
+        `${path} exists but has no visible content. Ask the agent to build the landing page, Accept, then Refresh.`,
+      );
+      $("preview-hint").textContent = `Empty file: ${path}`;
+      return;
+    }
+    hidePreviewEmpty();
+    const url = previewUrlForPath(path);
+    $("preview-frame").src = `${url}?t=${Date.now()}`;
+    $("preview-hint").textContent = repo
+      ? `Showing ${path} from ${repo}`
+      : `Showing workspace file: ${path}`;
+  } catch (e) {
+    showPreviewEmpty("Preview failed", e.message);
+    $("preview-hint").textContent = e.message;
+  }
 }
 
 async function openPreviewModal() {
@@ -1252,23 +1293,26 @@ async function openPreviewModal() {
     $("preview-modal-title").textContent = "Website preview";
   }
   const pathInput = $("preview-path");
-  if (!pathInput.value.trim()) {
-    pathInput.value = previewMeta?.defaultPath ?? previewMeta?.candidates?.[0] ?? "index.html";
+  const preferred = previewMeta?.defaultPath ?? previewMeta?.candidates?.[0];
+  if (preferred) {
+    pathInput.value = preferred;
+  } else if (!pathInput.value.trim()) {
+    pathInput.value = "index.html";
   }
   if (!previewMeta?.defaultPath) {
     $("preview-hint").textContent = previewMeta?.repo
-      ? `No index.html in ${previewMeta.repo} yet. Enter a path or create one with the agent.`
-      : "No index.html in this repo yet. Enter a path (e.g. public/index.html).";
+      ? `No HTML in ${previewMeta.repo} yet. Set Model → send “make a simple landing website” → Accept → Preview.`
+      : "No HTML in this repo yet. Create pages with the agent first.";
   }
   openModal("preview-modal");
-  refreshPreviewFrame();
+  void refreshPreviewFrame();
 }
 
 $("settings-open")?.addEventListener("click", openSettingsModal);
 $("preview-open")?.addEventListener("click", () => void openPreviewModal());
 bindModal("settings-modal", "settings-close");
 bindModal("preview-modal", "preview-close");
-$("preview-refresh").addEventListener("click", () => refreshPreviewFrame());
+$("preview-refresh").addEventListener("click", () => void refreshPreviewFrame());
 $("preview-new-tab").addEventListener("click", () => {
   const path = $("preview-path").value.trim() || "index.html";
   window.open(previewUrlForPath(path), "_blank", "noopener");
