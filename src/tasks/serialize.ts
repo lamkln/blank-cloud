@@ -1,6 +1,7 @@
 import type { TaskRecord } from "./types.js";
 import { readWorkspaceFile } from "../workspace/paths.js";
 import type { PendingProposal } from "./types.js";
+import { listArtifacts } from "./artifacts.js";
 
 export function enrichProposal(proposal: PendingProposal): PendingProposal {
   return {
@@ -31,6 +32,8 @@ export function taskToJson(task: TaskRecord) {
     pendingProposal: task.pendingProposal ? enrichProposal(task.pendingProposal) : null,
     lastError: task.lastError,
     iteration: task.iteration,
+    mode: task.mode,
+    artifacts: listArtifacts(task.id),
     canUndo: task.undoStack.length > 0,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,

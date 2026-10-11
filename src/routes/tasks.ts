@@ -25,6 +25,12 @@ import { activeRepoSettings, usesActiveRemoteRepo } from "../repo/runtime.js";
 import { isGitHubOAuthConfigured } from "../auth/github-oauth.js";
 
 import { updateUser } from "../auth/users.js";
+import { parseAgentMode } from "../agent/modes.js";
+import { loadAppSettings } from "../settings/store.js";
+import { getArtifact, listArtifacts } from "../tasks/artifacts.js";
+import { resolveWorkspacePath } from "../workspace/paths.js";
+import fs from "node:fs";
+import path from "node:path";
 
 const tasks = new Hono();
 
@@ -53,13 +59,14 @@ tasks.get("/", (c) => {
 });
 
 tasks.post("/", async (c) => {
-  let body: { prompt?: string; message?: string };
+  let body: { prompt?: string; message?: string; mode?: string };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
   const prompt = (body.prompt ?? body.message ?? "").trim();
+  const mode = parseAgentMode(body.mode ?? loadAppSettings().agentMode);
   if (!prompt) {
     return c.json({ error: "prompt is required" }, 400);
   }
@@ -77,7 +84,7 @@ tasks.post("/", async (c) => {
     );
   }
 
-  const task = createTask(prompt, currentOwner());
+  const task = createTask(prompt, currentOwner(), mode);
   queueMicrotask(() => {
     void runAgentTurn(task.id);
   });
@@ -86,10 +93,49 @@ tasks.post("/", async (c) => {
     {
       id: task.id,
       status: task.status,
+      mode: task.mode,
       stream: `/tasks/${task.id}/stream`,
     },
     201,
   );
+});
+
+tasks.get("/:id/artifacts", (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  return c.json({ artifacts: listArtifacts(task.id) });
+});
+
+tasks.get("/:id/artifacts/:artifactId", (c) => {
+  const task = getTask(c.req.param("id"));
+  if (!canAccessTask(task)) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  const artifact = getArtifact(task.id, c.req.param("artifactId"));
+  if (!artifact) {
+    return c.json({ error: "Artifact not found" }, 404);
+  }
+  const abs = resolveWorkspacePath(artifact.path);
+  if (!fs.existsSync(abs)) {
+    return c.json({ error: "Artifact file missing on disk" }, 404);
+  }
+  const ext = path.extname(artifact.name).toLowerCase();
+  const type =
+    ext === ".jar"
+      ? "application/java-archive"
+      : ext === ".zip"
+        ? "application/zip"
+        : "application/octet-stream";
+  const data = fs.readFileSync(abs);
+  return new Response(data, {
+    headers: {
+      "Content-Type": type,
+      "Content-Disposition": `attachment; filename="${artifact.name}"`,
+      "X-Checksum-Sha256": artifact.sha256,
+    },
+  });
 });
 
 tasks.get("/:id/events", (c) => {

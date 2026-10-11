@@ -1200,6 +1200,33 @@ details.settings-group > summary.settings-group-title::-webkit-details-marker {
   color: var(--green);
 }
 
+.tool-cat-mod {
+  border-left-color: #c678dd;
+}
+
+.tool-cat-mod .tool-cat-badge {
+  color: #c678dd;
+}
+
+.artifact-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.artifact-bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.artifact-link {
+  text-decoration: none;
+}
+
 .tool-cat-msg {
   min-width: 0;
   line-height: 1.4;

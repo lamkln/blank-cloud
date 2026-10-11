@@ -61,11 +61,14 @@ export interface TaskEvent {
   createdAt: string;
 }
 
+export type AgentMode = "coding" | "mod-maker";
+
 export interface TaskRecord {
   id: string;
   prompt: string;
   title: string;
   status: TaskStatus;
+  mode: AgentMode;
   createdAt: string;
   updatedAt: string;
   messages: TaskMessage[];

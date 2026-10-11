@@ -34,6 +34,7 @@ const patchSchema = z.object({
     .optional(),
   model: z.string().min(1).optional(),
   customBaseUrl: z.string().optional(),
+  agentMode: z.enum(["coding", "mod-maker"]).optional(),
   apiKey: z.string().optional(),
   keys: keysSchema,
 });
@@ -45,6 +46,7 @@ settings.get("/", (c) => {
     provider: runtime.provider,
     model: runtime.model,
     customBaseUrl: runtime.customBaseUrl || null,
+    agentMode: app.agentMode,
     providers: listProvidersPublic(app),
     keys: maskedKeys(app),
     storage: "settings.json in BLANK_CLOUD_DATA (Web UI)",
@@ -180,6 +182,7 @@ settings.patch("/", async (c) => {
     provider: data.provider,
     model: data.model,
     customBaseUrl: data.customBaseUrl,
+    agentMode: data.agentMode,
     keys: keyUpdates,
   });
 
@@ -187,6 +190,7 @@ settings.patch("/", async (c) => {
     provider: next.provider,
     model: next.model,
     customBaseUrl: next.customBaseUrl || null,
+    agentMode: next.agentMode,
     providers: listProvidersPublic(next),
     keys: maskedKeys(next),
   });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ChatRole, TaskEvent, TaskRecord, TaskMessage } from "./types.js";
+import type { AgentMode, ChatRole, TaskEvent, TaskRecord, TaskMessage } from "./types.js";
 
 type Listener = (event: TaskEvent) => void;
 
@@ -12,7 +12,11 @@ function titleFromPrompt(prompt: string): string {
   return line.length > 72 ? `${line.slice(0, 69)}…` : line;
 }
 
-export function createTask(prompt: string, ownerLogin: string | null = null): TaskRecord {
+export function createTask(
+  prompt: string,
+  ownerLogin: string | null = null,
+  mode: AgentMode = "coding",
+): TaskRecord {
   const now = new Date().toISOString();
   const userMessage: TaskMessage = {
     id: randomUUID(),
@@ -25,6 +29,7 @@ export function createTask(prompt: string, ownerLogin: string | null = null): Ta
     prompt,
     title: titleFromPrompt(prompt),
     status: "running",
+    mode,
     createdAt: now,
     updatedAt: now,
     messages: [userMessage],

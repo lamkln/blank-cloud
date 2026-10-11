@@ -14,6 +14,9 @@ import {
 
 /** Device flow or web OAuth client id → per-user tokens and workspaces. */
 export function usePerUserGitHubStorage(): boolean {
+  if (process.env.BLANK_CLOUD_TEST_MODE === "1") {
+    return false;
+  }
   return isGitHubOAuthConfigured() || hasGitHubConnectClientId();
 }
 

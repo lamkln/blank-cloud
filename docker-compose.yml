@@ -20,6 +20,7 @@ services:
     volumes:
       - ${BLANK_CLOUD_PROJECT:-./project}:/workspace
       - ${BLANK_CLOUD_DATA:-./data}:/app/data
+      - ${BLANK_CLOUD_GRADLE_CACHE:-./data/gradle}:/root/.gradle
       # Optional — one-click updates from the Web UI (see README):
       # - ${BLANK_CLOUD_INSTALL:-.}:/install
       # - /var/run/docker.sock:/var/run/docker.sock

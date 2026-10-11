@@ -395,6 +395,41 @@ Errors from git no longer echo your token in API responses.
 
 Tasks live in memory until the container restarts. Start a new run with **+** in the sidebar.
 
+## Make a Minecraft mod with blank-cloud
+
+**Mod Maker** mode scaffolds a Fabric project (JDK 21 + Gradle in the container), builds with `./gradlew`, validates the jar, and packages a **Modrinth handoff zip** (`modrinth/metadata.json` + jar + icon). blank-cloud does **not** upload to Modrinth — use your separate Modrinth publishing assistant with the zip.
+
+1. **Web UI:** Settings → **Agent mode** → **Mod Maker (Minecraft)** → Save. Start a task from the chat composer.
+2. **API:**
+
+```bash
+curl -s -X POST http://localhost:8787/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"mod-maker","prompt":"Make a Fabric mod for 1.21.x with ruby ore, ruby gem and ruby sword"}'
+```
+
+Example follow-ups: “Use mod id `ruby_mod`”, “Run mod_build and fix compile errors”, “Package for Modrinth”.
+
+**Artifacts:** when a build or package step finishes, use **Downloads** in the run header or:
+
+```bash
+curl -OJ "http://localhost:8787/tasks/TASK_ID/artifacts/ARTIFACT_ID"
+```
+
+**NAS / self-hosted update** (image rebuild is slower than usual because of Temurin JDK 21):
+
+```bash
+cd ~/blank-cloud && bash scripts/update.sh
+```
+
+The agent listens on port **8787**. Gradle caches persist at `./data/gradle` → `/root/.gradle` in the container.
+
+**Tests (developer):**
+
+```bash
+npm test
+```
+
 ## Development (without Docker)
 
 ```bash

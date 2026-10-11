@@ -221,6 +221,10 @@ const TOOL_CATEGORY = {
   read_file: { label: "Explore", className: "tool-cat-explore" },
   propose_changes: { label: "Changes", className: "tool-cat-changes" },
   run_shell: { label: "Terminal", className: "tool-cat-shell" },
+  mod_scaffold: { label: "Mod", className: "tool-cat-mod" },
+  mod_build: { label: "Mod", className: "tool-cat-mod" },
+  mod_validate: { label: "Mod", className: "tool-cat-mod" },
+  modrinth_package: { label: "Mod", className: "tool-cat-mod" },
 };
 
 function toolCategoryMeta(data) {
@@ -519,6 +523,36 @@ function renderChanges(task) {
   }
 }
 
+function renderArtifacts(task) {
+  let bar = document.getElementById("artifact-bar");
+  const artifacts = task.artifacts || [];
+  if (!artifacts.length) {
+    if (bar) bar.remove();
+    return;
+  }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "artifact-bar";
+    bar.className = "artifact-bar";
+    const anchor = $("run-header") || $("chat-header");
+    if (anchor) anchor.appendChild(bar);
+  }
+  bar.innerHTML = "";
+  const label = document.createElement("span");
+  label.className = "artifact-bar-label";
+  label.textContent = "Downloads";
+  bar.appendChild(label);
+  for (const a of artifacts) {
+    const link = document.createElement("a");
+    link.className = "btn btn-sm artifact-link";
+    link.href = `/tasks/${task.id}/artifacts/${encodeURIComponent(a.id)}`;
+    link.download = a.name;
+    link.textContent = a.name;
+    link.title = `sha256 ${a.sha256}`;
+    bar.appendChild(link);
+  }
+}
+
 async function refreshTask() {
   if (!state.taskId) return;
   try {
@@ -534,6 +568,7 @@ async function refreshTask() {
     $("reject").disabled = task.status !== "awaiting_approval" || !task.pendingProposal;
     $("undo").disabled = !task.canUndo;
     renderChanges(task);
+    renderArtifacts(task);
     if (task.status === "running" || task.status === "executing") startPoll();
     else stopPoll();
   } catch (e) {
@@ -673,9 +708,10 @@ async function sendMessage() {
   $("send-btn").disabled = true;
   try {
     if (!state.taskId) {
+      const mode = $("agent-mode")?.value || settingsSnapshot?.agentMode || "coding";
       const task = await api("/tasks", {
         method: "POST",
-        body: JSON.stringify({ prompt: text }),
+        body: JSON.stringify({ prompt: text, mode }),
       });
       state.taskId = task.id;
       $("run-title").textContent = task.title || "Agent";
@@ -1108,6 +1144,7 @@ async function loadSettings() {
     select.appendChild(opt);
   }
   $("model").value = data.model || "";
+  if ($("agent-mode")) $("agent-mode").value = data.agentMode || "coding";
   $("custom-base-url").value = data.customBaseUrl || "";
   syncProviderFields();
   refreshKeyHint();
@@ -1139,6 +1176,7 @@ async function saveSettings() {
   const payload = {
     provider,
     model,
+    agentMode: $("agent-mode")?.value || "coding",
     customBaseUrl: $("custom-base-url").value.trim(),
   };
   const apiKey = $("api-key").value.trim();
