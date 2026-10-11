@@ -89,10 +89,13 @@ export interface RepoSettings {
   githubRepoFullName: string;
 }
 
+export type AgentModeSetting = "coding" | "mod-maker";
+
 export interface AppSettings {
   provider: LlmProvider;
   model: string;
   customBaseUrl: string;
+  agentMode: AgentModeSetting;
   keys: ProviderKeys;
   repo: RepoSettings;
   update: UpdateSettings;
@@ -209,6 +212,7 @@ function defaultSettings(): AppSettings {
     model:
       envModel || (provider === "custom" ? "" : DEFAULT_MODELS[provider]),
     customBaseUrl: baseUrl,
+    agentMode: "coding",
     keys: keysFromEnv(),
     repo: repoFromEnv(),
     update: defaultUpdateSettings(),
@@ -240,6 +244,10 @@ export function loadAppSettings(): AppSettings {
         provider: parseProvider(raw.provider ?? base.provider),
         model: resolveStoredModel(raw, base),
         customBaseUrl: raw.customBaseUrl?.trim() ?? base.customBaseUrl,
+        agentMode:
+          raw.agentMode === "mod-maker" || raw.agentMode === "coding"
+            ? raw.agentMode
+            : base.agentMode,
         keys: { ...base.keys, ...(raw.keys ?? {}) },
         repo: { ...base.repo, ...(raw.repo ?? {}) },
         update: { ...base.update, ...(raw.update ?? {}) },
@@ -267,6 +275,7 @@ export function updateAppSettings(
     keys?: Partial<ProviderKeys>;
     repo?: Partial<RepoSettings>;
     update?: Partial<UpdateSettings>;
+    agentMode?: AgentModeSetting;
   },
 ): AppSettings {
   const current = loadAppSettings();

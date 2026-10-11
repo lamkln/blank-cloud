@@ -9,6 +9,8 @@ export interface CommandResult {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   timedOut: boolean;
+  stdout: string;
+  stderr: string;
 }
 
 export async function runShellCommand(
@@ -25,12 +27,15 @@ export async function runShellCommand(
     });
 
     let timedOut = false;
+    let stdoutBuf = "";
+    let stderrBuf = "";
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBuf += chunk.toString("utf8");
       const text = chunk.toString("utf8");
       for (const line of text.split("\n").filter(Boolean)) {
         emit(taskId, "command_stdout", line, { command });
@@ -39,6 +44,7 @@ export async function runShellCommand(
 
     child.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
+      stderrBuf += text;
       for (const line of text.split("\n").filter(Boolean)) {
         emit(taskId, "command_stderr", line, { command });
       }
@@ -58,6 +64,8 @@ export async function runShellCommand(
         exitCode,
         signal,
         timedOut,
+        stdout: stdoutBuf,
+        stderr: stderrBuf,
       });
     });
   });

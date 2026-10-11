@@ -3,3 +3,8 @@ dist
 .env
 *.log
 data/
+data-*/
+project-test-mod/
+project-integration-mod/
+project-api-test/
+project-e2e-mod/
